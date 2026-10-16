@@ -63,6 +63,16 @@ class JobSearchServiceTest {
     }
 
     @Test
+    void sendsJsonContentTypeParamAndHandlesHtmlReply() {
+        adzuna.expect(requestTo(org.hamcrest.Matchers.containsString("content-type=application/json")))
+                .andRespond(withSuccess("<!DOCTYPE html><html><title>Uh oh</title></html>", MediaType.TEXT_HTML));
+
+        assertThatThrownBy(() -> service.search(1L, "java", "", 1))
+                .isInstanceOf(ResponseStatusException.class)
+                .hasMessageContaining("unexpected reply");
+    }
+
+    @Test
     void wrongKeysGiveAClearMessage() {
         adzuna.expect(requestTo(org.hamcrest.Matchers.containsString("api.adzuna.com")))
                 .andRespond(withStatus(HttpStatus.UNAUTHORIZED).contentType(MediaType.APPLICATION_JSON)

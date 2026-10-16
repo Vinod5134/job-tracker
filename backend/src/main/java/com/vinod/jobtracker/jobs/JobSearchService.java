@@ -1,6 +1,8 @@
 package com.vinod.jobtracker.jobs;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vinod.jobtracker.application.JobApplication;
 import com.vinod.jobtracker.application.JobApplicationRepository;
 import com.vinod.jobtracker.config.AppProperties;
@@ -14,7 +16,9 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
@@ -31,6 +35,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 public class JobSearchService {
 
     private static final Logger log = LoggerFactory.getLogger(JobSearchService.class);
+    private static final ObjectMapper JSON = new ObjectMapper();
 
     private final RestClient rest;
     private final AppProperties props;
@@ -67,15 +72,22 @@ public class JobSearchService {
                 .queryParam("results_per_page", 20)
                 .queryParam("max_days_old", 30)
                 .queryParam("sort_by", "date")
+                // Without this Adzuna may answer with an HTML page instead of JSON
+                .queryParam("content-type", "application/json")
                 .queryParam("what", what == null || what.isBlank() ? "java developer" : what.trim());
         if (where != null && !where.isBlank()) {
             uri.queryParam("where", where.trim());
         }
         URI target = uri.encode().buildAndExpand(adzuna.country(), safePage).toUri();
 
-        JsonNode body;
+        String raw;
         try {
-            body = rest.get().uri(target).retrieve().body(JsonNode.class);
+            // Read as text and parse ourselves, so a wrong Content-Type header can't break it
+            raw = rest.get().uri(target)
+                    .accept(MediaType.APPLICATION_JSON)
+                    .header(HttpHeaders.USER_AGENT, "job-tracker/1.0 (+https://github.com/Vinod5134/job-tracker)")
+                    .retrieve()
+                    .body(String.class);
         } catch (RestClientResponseException e) {
             // Log Adzuna's own reason (the URL with the keys is not part of this message)
             log.warn("Adzuna search failed: HTTP {} {}", e.getStatusCode().value(),
@@ -99,8 +111,18 @@ public class JobSearchService {
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
                     "Couldn't read Adzuna's reply (" + e.getClass().getSimpleName() + "). Try again.");
         }
-        if (body == null) {
+        if (raw == null || raw.isBlank()) {
             return new JobSearchResponse(0, safePage, List.of());
+        }
+        JsonNode body;
+        try {
+            body = JSON.readTree(raw);
+        } catch (JsonProcessingException e) {
+            // Log the start of what came back (an HTML page title usually says why)
+            String start = raw.replaceAll("\\s+", " ");
+            log.warn("Adzuna sent a non-JSON reply: {}", start.substring(0, Math.min(300, start.length())));
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                    "Adzuna sent an unexpected reply. Check the keys in Render, or try again later.");
         }
 
         List<String> skills = UserService.skillList(userService.get(userId));
