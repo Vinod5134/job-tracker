@@ -79,6 +79,35 @@ class JobAlertParserTest {
     }
 
     @Test
+    void indeedAlertEmail() {
+        String html = """
+                <table>
+                  <tr><td>
+                    <a href="https://in.indeed.com/rc/clk/dl?jk=1a2b3c4d5e6f7a8b&from=ja&qd=xyz">Junior Java Developer</a>
+                    <div>Capgemini</div>
+                    <div>Pune, Maharashtra</div>
+                    <div>₹3,00,000 - ₹4,50,000 a year</div>
+                    <div>Easily apply</div>
+                  </td></tr>
+                  <tr><td>
+                    <a href="https://in.indeed.com/pagead/clk?mo=r&ad=abc&jk=9f8e7d6c5b4a3210&from=ja">Software Engineer Trainee</a>
+                    <div>HCLTech</div>
+                    <div>Chennai, Tamil Nadu</div>
+                    <div>Urgently hiring</div>
+                  </td></tr>
+                </table>
+                """;
+
+        List<ParsedJob> jobs = parser.parse(html);
+
+        assertThat(jobs).hasSize(2);
+        assertThat(jobs.get(0)).isEqualTo(new ParsedJob(Source.INDEED, "Junior Java Developer", "Capgemini",
+                "Pune, Maharashtra", "https://in.indeed.com/viewjob?jk=1a2b3c4d5e6f7a8b"));
+        assertThat(jobs.get(1).company()).isEqualTo("HCLTech");
+        assertThat(jobs.get(1).location()).isEqualTo("Chennai, Tamil Nadu");
+    }
+
+    @Test
     void trackingRedirectsAreUnwrapped() {
         String html = "<a href=\"https://click.naukri.com/r?u=https%3A%2F%2Fwww.naukri.com%2Fjob-listings-java-trainee-infosys-pune-0-to-1-years-170925800789%3Fsrc%3Dmail\">Java Trainee</a>";
 

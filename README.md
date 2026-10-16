@@ -16,9 +16,10 @@ A real-time job application tracker. Sign in with Google, track applications on 
   - Every automatic change has an **Undo**
 - **Real-time sync**: STOMP over WebSocket; open the app on a phone and a laptop and both update instantly
 - **Reminders**: interviews in the next 24 hours, and a "follow up" nudge after 14 days with no reply
-- **Find jobs**: live listings from the Adzuna API, scored against your skills (Java ≠ JavaScript), with a fresher-friendly filter and "Save to tracker"
-  - **From your LinkedIn and Naukri alerts**: jobs pulled from the job-alert emails in your own Gmail (parsed with jsoup; only title, company, location and link are stored, kept 14 days)
-  - One-click buttons that open the same search on LinkedIn, Naukri, Indeed and Foundit (LinkedIn and Naukri have no public job API, and scraping their sites is against their terms)
+- **Find jobs**: a live feed of jobs from your **LinkedIn, Naukri and Indeed** job-alert emails, scored against your skills (Java ≠ JavaScript), with site and fresher filters and "Save to tracker"
+  - Gmail is checked every 5 minutes and as soon as the page opens; new jobs arrive over the WebSocket without a reload
+  - Alert emails are parsed with jsoup; only title, company, location and link are stored (kept 14 days)
+  - One-click buttons open the same search on LinkedIn, Naukri, Indeed and Foundit. These sites have no public job API and forbid scraping, so the app works from the alerts they email you
 - **Dashboard**: totals, response rate, applications per week, upcoming interviews, live activity feed
 
 ## Tech stack
@@ -29,7 +30,7 @@ A real-time job application tracker. Sign in with Google, track applications on 
 | Database | MySQL (production, Aiven free tier); PostgreSQL and Oracle also supported through Spring profiles; H2 (local) |
 | API | RESTful JSON APIs, Bean Validation, global error handling, Swagger / OpenAPI |
 | Frontend | TypeScript, HTML, CSS (no framework), Vite, `@stomp/stompjs` |
-| Integrations | Google OAuth2, Gmail REST API, Adzuna Jobs API |
+| Integrations | Google OAuth2, Gmail REST API, jsoup (job alert emails) |
 | Testing | JUnit 5, Spring Boot Test, MockMvc, Spring Security Test (18 tests) |
 | Tooling | Maven, Git, Docker, Postman |
 | Hosting | Render (backend, Docker), Vercel (frontend) |
@@ -43,7 +44,7 @@ flowchart LR
     API -- "JPA / Hibernate" --> DB[("MySQL")]
     API -- "OAuth2 sign-in" --> Google["Google"]
     API -- "read-only, every 10 min" --> Gmail["Gmail API"]
-    API -- "job search" --> Adzuna["Adzuna API"]
+    Gmail -- "LinkedIn / Naukri / Indeed alerts" --> API
 ```
 
 **Sign-in flow:** the browser goes to `/oauth2/authorization/google` on the backend, Google redirects back, the backend creates or updates the user and redirects to the frontend with its own JWT in the URL fragment (`#/auth?token=...`). The frontend stores it and sends it as `Authorization: Bearer`. The WebSocket sends the same token in the STOMP `CONNECT` frame.
@@ -57,7 +58,7 @@ backend/   Spring Boot API (package-by-feature)
   config/        security, JWT, WebSocket, OAuth2 success handler, AES token cipher
   application/   job applications: entity, repository, service, REST controller, DTOs
   gmail/         Gmail client, email classifier, sync service, "needs review" API
-  jobs/          Adzuna search + skill matcher
+  jobs/          job-alert parser, feed + skill matcher
   dashboard/     stats endpoint
   reminder/      scheduled interview and follow-up reminders
   realtime/      WebSocket push service
@@ -152,7 +153,6 @@ Hibernate creates the tables on first start (`ddl-auto: update`).
    | `FRONTEND_URL` | `https://<your-app>.vercel.app` (no trailing slash) |
    | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | from Google Cloud |
    | `DB_URL` / `DB_USERNAME` / `DB_PASSWORD` | from Aiven (see step 1) |
-   | `ADZUNA_APP_ID` / `ADZUNA_APP_KEY` | free key from https://developer.adzuna.com (optional; without it "Find jobs" shows a setup message) |
 
    `JWT_SECRET` and `ENCRYPTION_KEY` are generated automatically.
 4. After the first deploy, note the URL (for example `https://job-tracker-api.onrender.com`) and add its two redirect URIs in Google Cloud.
@@ -179,7 +179,7 @@ Hibernate creates the tables on first start (`ddl-auto: update`).
 | DELETE | `/api/gmail` | Disconnect Gmail (revokes Google access) |
 | GET | `/api/gmail/emails?view=review\|all` | Detected job emails |
 | POST | `/api/gmail/emails/{id}/accept` / `dismiss` | Confirm or dismiss a "needs review" email |
-| GET | `/api/jobs/search?what=&where=&page=` | Job search with skill match score |
+| GET | `/api/jobs/alerts` | Jobs from LinkedIn / Naukri / Indeed alert emails, with skill match score |
 | WS | `/ws` → subscribe `/user/queue/updates` | Live events |
 
 Full interactive docs at `/swagger-ui.html`.

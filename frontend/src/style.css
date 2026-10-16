@@ -797,14 +797,72 @@ a:focus-visible {
 }
 
 .site-naukri {
-  color: #4a90e2;
+  color: #2d6fd6;
+}
+
+.site-indeed {
+  color: #2557a7;
 }
 
 @media (prefers-color-scheme: dark) {
   .site-linkedin,
-  .site-naukri {
+  .site-naukri,
+  .site-indeed {
     color: var(--accent-text);
   }
+}
+
+.toolbar.wrap {
+  flex-wrap: wrap;
+}
+
+.filter-chips {
+  margin: 0;
+}
+
+.chip {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.chip-on {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  font-weight: 500;
+}
+
+.toolbar input[type="search"] {
+  max-width: 420px;
+}
+
+.live-search {
+  margin-top: 24px;
+}
+
+.search-form.two {
+  grid-template-columns: 1fr 1fr;
+  margin: 10px 0 12px;
+}
+
+.setup {
+  text-align: left;
+}
+
+.setup h2 {
+  text-align: center;
+}
+
+.setup-steps {
+  margin: 12px 0;
+  padding-left: 20px;
+  line-height: 1.7;
 }
 
 .job-result-head {

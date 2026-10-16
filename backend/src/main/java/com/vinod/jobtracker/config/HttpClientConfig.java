@@ -7,7 +7,7 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
 /**
- * One shared HTTP client for calls to Google and Adzuna, with timeouts so a slow
+ * One shared HTTP client for calls to Google (OAuth, Gmail), with timeouts so a slow
  * external API can't hang a request thread.
  */
 @Configuration

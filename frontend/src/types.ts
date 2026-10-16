@@ -1,5 +1,5 @@
 export type Status = "SAVED" | "APPLIED" | "INTERVIEW" | "OFFER" | "REJECTED";
-export type Source = "NAUKRI" | "LINKEDIN" | "COMPANY_SITE" | "REFERRAL" | "JOB_SEARCH" | "EMAIL" | "OTHER";
+export type Source = "NAUKRI" | "LINKEDIN" | "INDEED" | "COMPANY_SITE" | "REFERRAL" | "JOB_SEARCH" | "EMAIL" | "OTHER";
 
 export const STATUSES: Status[] = ["SAVED", "APPLIED", "INTERVIEW", "OFFER", "REJECTED"];
 
@@ -14,6 +14,7 @@ export const STATUS_LABEL: Record<Status, string> = {
 export const SOURCE_LABEL: Record<Source, string> = {
   NAUKRI: "Naukri",
   LINKEDIN: "LinkedIn",
+  INDEED: "Indeed",
   COMPANY_SITE: "Company site",
   REFERRAL: "Referral",
   JOB_SEARCH: "Job search",
@@ -106,28 +107,21 @@ export interface SyncResult {
   skipped: boolean;
 }
 
+export type JobSite = "LINKEDIN" | "NAUKRI" | "INDEED";
+
+/** A job from one of the user's LinkedIn / Naukri / Indeed alert emails. */
 export interface JobResult {
   id: string;
-  /** ADZUNA, or LINKEDIN / NAUKRI for jobs from his alert emails */
-  source: "ADZUNA" | "LINKEDIN" | "NAUKRI";
+  source: JobSite;
   title: string;
   company: string;
   location: string;
-  description: string;
   url: string;
-  postedAt: string | null;
-  salaryMin: number | null;
-  salaryMax: number | null;
+  receivedAt: string;
   matchScore: number;
   matchedSkills: string[];
   fresherFriendly: boolean;
   saved: boolean;
-}
-
-export interface JobSearchResponse {
-  total: number;
-  page: number;
-  results: JobResult[];
 }
 
 export type LiveEventType =

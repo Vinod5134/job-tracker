@@ -26,8 +26,8 @@ public class JobAlertService {
 
     /** Alert senders. Other Naukri/LinkedIn mail is skipped later if it holds no job links. */
     static final String ALERT_QUERY = "-in:sent {from:jobalerts-noreply@linkedin.com from:jobs-listings@linkedin.com "
-            + "from:jobs-noreply@linkedin.com from:naukri.com}";
-    private static final int MAX_EMAILS_PER_SYNC = 15;
+            + "from:jobs-noreply@linkedin.com from:naukri.com from:indeed.com}";
+    private static final int MAX_EMAILS_PER_SYNC = 20;
     private static final int KEEP_DAYS = 14;
 
     private final GmailClient gmail;

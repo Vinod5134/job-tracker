@@ -4,5 +4,5 @@ package com.vinod.jobtracker.application;
  * Where the job was found.
  */
 public enum JobSource {
-    NAUKRI, LINKEDIN, COMPANY_SITE, REFERRAL, JOB_SEARCH, EMAIL, OTHER
+    NAUKRI, LINKEDIN, INDEED, COMPANY_SITE, REFERRAL, JOB_SEARCH, EMAIL, OTHER
 }

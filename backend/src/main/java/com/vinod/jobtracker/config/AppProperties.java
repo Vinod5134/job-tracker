@@ -12,7 +12,6 @@ public record AppProperties(
         int jwtExpiryHours,
         String encryptionKey,
         Gmail gmail,
-        Adzuna adzuna,
         String defaultSkills) {
 
     public AppProperties {
@@ -26,18 +25,5 @@ public record AppProperties(
     }
 
     public record Gmail(long syncIntervalMs, int firstSyncDays, int maxMessagesPerSync) {
-    }
-
-    public record Adzuna(String appId, String appKey, String country) {
-
-        public Adzuna {
-            // Pasted keys often carry a stray space or newline
-            appId = appId == null ? null : appId.trim();
-            appKey = appKey == null ? null : appKey.trim();
-        }
-
-        public boolean configured() {
-            return appId != null && !appId.isBlank() && appKey != null && !appKey.isBlank();
-        }
     }
 }

@@ -42,13 +42,10 @@ app:
   # Used to encrypt the stored Gmail refresh token (AES-GCM)
   encryption-key: ${ENCRYPTION_KEY:local-dev-encryption-key-change-me}
   gmail:
-    sync-interval-ms: ${GMAIL_SYNC_INTERVAL_MS:600000}
+    # Status emails and LinkedIn / Naukri / Indeed job alerts are checked this often (5 minutes)
+    sync-interval-ms: ${GMAIL_SYNC_INTERVAL_MS:300000}
     first-sync-days: 30
     max-messages-per-sync: 50
-  adzuna:
-    app-id: ${ADZUNA_APP_ID:}
-    app-key: ${ADZUNA_APP_KEY:}
-    country: in
   default-skills: Java, Spring Boot, Spring MVC, Spring Security, Spring Data JPA, Hibernate, Microservices, REST API, JSON, SQL, PL/SQL, Oracle, JDBC, Servlets, JSP, HTML, CSS, JavaScript, TypeScript, Git, Maven
 
 springdoc:

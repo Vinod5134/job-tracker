@@ -7,7 +7,6 @@ import type {
   EmailRecord,
   GmailStatus,
   JobResult,
-  JobSearchResponse,
   Me,
   Status,
   SyncResult,
@@ -89,11 +88,4 @@ export const api = {
   undoEmail: (id: number) => request<EmailRecord>(`/api/gmail/emails/${id}/undo`, { method: "POST" }),
 
   alertJobs: () => request<JobResult[]>("/api/jobs/alerts"),
-  searchJobs: (what: string, where: string, page: number) => {
-    const params = new URLSearchParams({ what, page: String(page) });
-    if (where.trim()) {
-      params.set("where", where.trim());
-    }
-    return request<JobSearchResponse>(`/api/jobs/search?${params}`);
-  },
 };

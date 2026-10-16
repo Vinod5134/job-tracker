@@ -26,7 +26,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class JobAlertParser {
 
-    public enum Source { LINKEDIN, NAUKRI }
+    public enum Source { LINKEDIN, NAUKRI, INDEED }
 
     public record ParsedJob(Source source, String title, String company, String location, String url) {
     }
@@ -36,6 +36,8 @@ public class JobAlertParser {
 
     private static final Pattern LINKEDIN_JOB = Pattern.compile("linkedin\\.com/(?:comm/)?jobs/view/(\\d{6,})");
     private static final Pattern NAUKRI_JOB = Pattern.compile("naukri\\.com/(job-listings-[a-z0-9-]+?)(?:[?#&\"']|$)");
+    /** Indeed job links carry the job key as jk=16 hex characters (viewjob, rc/clk, pagead/clk...). */
+    private static final Pattern INDEED_JOB = Pattern.compile("indeed\\.com/[^\\s\"']*?[?&]jk=([a-f0-9]{16})");
 
     /** Link texts that are buttons, not job titles. */
     private static final Set<String> NOT_TITLES = Set.of(
@@ -45,11 +47,13 @@ public class JobAlertParser {
 
     /** Card text that isn't company or location. */
     private static final Pattern NOISE = Pattern.compile(
-            "(?i)^(actively recruiting|easy apply|promoted|be an early applicant|\\d+ (connections?|alumni|applicants?).*|"
+            "(?i)^(actively recruiting|easy apply|easily apply|urgently hiring|responsive employer|hiring multiple candidates|"
+                    + "promoted|be an early applicant|\\d+ (connections?|alumni|applicants?).*|"
                     + "new|apply|apply now|view job|reviews?|\\d+(\\.\\d)? ?\u2605?|\\(\\d+ reviews?\\)|"
                     + ".*days? ago|today|just now|posted.*|hot job|featured|\\d+ (day|hour|week)s? ago)$");
     private static final Pattern EXPERIENCE = Pattern.compile("(?i)\\b\\d+\\s*(-|to)\\s*\\d+\\s*(yrs?|years?)\\b|\\bfresher\\b");
-    private static final Pattern SALARY = Pattern.compile("(?i)(\u20b9|\\blpa\\b|lacs?\\b|lakhs?\\b|not disclosed|per annum)");
+    private static final Pattern SALARY = Pattern.compile(
+            "(?i)(\u20b9|\\blpa\\b|lacs?\\b|lakhs?\\b|not disclosed|per annum|a year|a month|per month)");
 
     public List<ParsedJob> parse(String html) {
         if (html == null || html.isBlank()) {
@@ -113,6 +117,11 @@ public class JobAlertParser {
         if (naukri.find()) {
             String slug = naukri.group(1);
             return Optional.of(new JobLink(Source.NAUKRI, "nk-" + slug, "https://www.naukri.com/" + slug));
+        }
+        Matcher indeed = INDEED_JOB.matcher(decoded.toLowerCase(Locale.ROOT));
+        if (indeed.find()) {
+            String key = indeed.group(1);
+            return Optional.of(new JobLink(Source.INDEED, "in-" + key, "https://in.indeed.com/viewjob?jk=" + key));
         }
         return Optional.empty();
     }
