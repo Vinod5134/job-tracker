@@ -1,8 +1,9 @@
 import { api } from "../api";
 import { errorBox, h, loading, safeUrl, setChildren } from "../dom";
 import { salaryRange, timeAgo } from "../format";
+import { onLive } from "../live";
 import { toast, toastError } from "../toast";
-import type { JobResult } from "../types";
+import type { JobResult, Source } from "../types";
 
 const SAVED_KEY = "jobtracker.lastSearch";
 
@@ -61,11 +62,100 @@ export function renderJobs(root: HTMLElement): () => void {
     }
   };
 
+  // ---- "From your alerts" tab: jobs read from his LinkedIn / Naukri alert emails ----
+  const alertList = h("div", { class: "job-results" });
+  let alertsLoaded = false;
+  const loadAlerts = async () => {
+    alertsLoaded = true;
+    alertList.replaceChildren(loading("Loading jobs from your alerts"));
+    try {
+      const [gmail, jobs] = await Promise.all([api.gmailStatus(), api.alertJobs()]);
+      if (!alive) {
+        return;
+      }
+      if (!gmail.connected) {
+        setChildren(
+          alertList,
+          h("div", { class: "empty" },
+            h("h2", null, "Connect Gmail to see your alert jobs"),
+            h("p", { class: "muted" }, "Jobs from the LinkedIn and Naukri job alerts in your inbox show up here, scored against your skills."),
+            h("a", { class: "btn btn-primary", href: "#/settings" }, "Go to settings")),
+        );
+        return;
+      }
+      const syncBtn = h("button", { class: "btn", type: "button" }, "Check Gmail now");
+      syncBtn.addEventListener("click", async () => {
+        syncBtn.setAttribute("disabled", "");
+        syncBtn.textContent = "Checking…";
+        try {
+          await api.syncGmail();
+          await loadAlerts();
+        } catch (e) {
+          toastError((e as Error).message);
+          syncBtn.removeAttribute("disabled");
+          syncBtn.textContent = "Check Gmail now";
+        }
+      });
+      const shown = jobs;
+      setChildren(
+        alertList,
+        h("div", { class: "toolbar" },
+          h("p", { class: "muted small" }, `${jobs.length} jobs from your alerts in the last 14 days · best skill match first`),
+          syncBtn),
+        shown.length
+          ? shown.map(jobCard)
+          : h("div", { class: "empty" },
+              h("h2", null, "No alert jobs yet"),
+              h("p", { class: "muted" }, "Turn on job alerts on LinkedIn (Jobs → Set alert) and Naukri (Jobs → Job alerts) for \"Java Developer\". New alerts appear here after the next Gmail check.")),
+      );
+    } catch (e) {
+      if (alive) {
+        alertList.replaceChildren(errorBox((e as Error).message, loadAlerts));
+      }
+    }
+  };
+
+  const searchView = h("div", null);
+  const alertsView = h("div", { hidden: true }, alertList);
+  let tab: "search" | "alerts" = "search";
+  const tabs = h("div", { class: "tabs", role: "tablist" });
+  const drawTabs = () => {
+    setChildren(
+      tabs,
+      [
+        { id: "search" as const, label: "Search" },
+        { id: "alerts" as const, label: "From your LinkedIn and Naukri alerts" },
+      ].map((t) =>
+        h("button", {
+          class: "tab", type: "button", role: "tab", "aria-selected": String(tab === t.id),
+          onClick: () => {
+            tab = t.id;
+            searchView.hidden = tab !== "search";
+            alertsView.hidden = tab !== "alerts";
+            drawTabs();
+            if (tab === "alerts" && !alertsLoaded) {
+              loadAlerts();
+            }
+          },
+        }, t.label),
+      ),
+    );
+  };
+  drawTabs();
+
   root.replaceChildren(
     h(
       "div",
       { class: "page" },
       h("div", { class: "page-head" }, h("h1", null, "Find jobs")),
+      tabs,
+      alertsView,
+      searchView,
+    ),
+  );
+
+  setChildren(
+    searchView,
       h("p", { class: "muted" }, "Live listings from Adzuna, scored against your skills. The buttons below open the same search on LinkedIn, Naukri, Indeed and Foundit. Apply there, then add the job to your board."),
       h(
         "form",
@@ -84,14 +174,24 @@ export function renderJobs(root: HTMLElement): () => void {
       siteLinks,
       results,
       pager,
-    ),
   );
   run(1);
 
+  const unsubscribe = onLive((event) => {
+    if (event.type === "ALERT_JOBS" && alertsLoaded) {
+      loadAlerts();
+    }
+  });
+
   return () => {
     alive = false;
+    unsubscribe();
   };
 }
+
+/** Which board "source" a saved job gets. */
+const SAVE_SOURCE: Record<string, Source> = { ADZUNA: "JOB_SEARCH", LINKEDIN: "LINKEDIN", NAUKRI: "NAUKRI" };
+const SOURCE_NAME: Record<string, string> = { ADZUNA: "Adzuna", LINKEDIN: "LinkedIn alert", NAUKRI: "Naukri alert" };
 
 function jobCard(job: JobResult): HTMLElement {
   const url = safeUrl(job.url);
@@ -104,7 +204,7 @@ function jobCard(job: JobResult): HTMLElement {
         company: job.company.slice(0, 150),
         jobRole: job.title.slice(0, 150),
         location: job.location.slice(0, 150) || null,
-        source: "JOB_SEARCH",
+        source: SAVE_SOURCE[job.source] ?? "JOB_SEARCH",
         status: "SAVED",
         jobUrl: url,
         salary: salary,
@@ -130,12 +230,13 @@ function jobCard(job: JobResult): HTMLElement {
     h(
       "div",
       { class: "chips" },
+      job.source !== "ADZUNA" ? h("span", { class: `pill site-${job.source.toLowerCase()}` }, SOURCE_NAME[job.source] ?? job.source) : null,
       job.fresherFriendly ? h("span", { class: "pill pill-success" }, "Fresher-friendly") : null,
       salary ? h("span", { class: "pill" }, salary) : null,
-      job.postedAt ? h("span", { class: "pill" }, `Posted ${timeAgo(job.postedAt)}`) : null,
+      job.postedAt ? h("span", { class: "pill" }, `${job.source === "ADZUNA" ? "Posted" : "Alert"} ${timeAgo(job.postedAt)}`) : null,
       job.matchedSkills.map((s) => h("span", { class: "pill pill-accent" }, s)),
     ),
-    h("p", { class: "job-desc" }, job.description),
+    job.description ? h("p", { class: "job-desc" }, job.description) : null,
     h(
       "div",
       { class: "job-actions" },

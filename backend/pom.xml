@@ -85,6 +85,13 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- HTML parsing for LinkedIn / Naukri job alert emails -->
+        <dependency>
+            <groupId>org.jsoup</groupId>
+            <artifactId>jsoup</artifactId>
+            <version>1.18.1</version>
+        </dependency>
+
         <!-- Swagger UI at /swagger-ui.html -->
         <dependency>
             <groupId>org.springdoc</groupId>

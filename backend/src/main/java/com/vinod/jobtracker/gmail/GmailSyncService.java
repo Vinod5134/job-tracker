@@ -11,6 +11,8 @@ import com.vinod.jobtracker.config.TokenCipher;
 import com.vinod.jobtracker.gmail.EmailClassifier.EmailInsight;
 import com.vinod.jobtracker.gmail.GmailClient.GmailAuthException;
 import com.vinod.jobtracker.gmail.GmailClient.GmailMessage;
+import com.vinod.jobtracker.jobs.JobAlertService;
+import java.util.Map;
 import com.vinod.jobtracker.realtime.LiveUpdateService;
 import com.vinod.jobtracker.user.AppUser;
 import java.time.Instant;
@@ -53,13 +55,15 @@ public class GmailSyncService {
     private final TokenCipher cipher;
     private final LiveUpdateService live;
     private final AppProperties props;
+    private final JobAlertService jobAlerts;
 
     /** Prevents the scheduler and a "Sync now" click from syncing the same user at once. */
     private final Set<Long> syncing = ConcurrentHashMap.newKeySet();
 
     public GmailSyncService(GmailConnectionRepository connections, EmailRecordRepository records, GmailClient gmail,
                             EmailClassifier classifier, ApplicationService applicationService, TokenCipher cipher,
-                            LiveUpdateService live, AppProperties props) {
+                            LiveUpdateService live, AppProperties props, JobAlertService jobAlerts) {
+        this.jobAlerts = jobAlerts;
         this.connections = connections;
         this.records = records;
         this.gmail = gmail;
@@ -104,6 +108,7 @@ public class GmailSyncService {
             connections.delete(connection);
         });
         records.deleteByUserId(userId);
+        jobAlerts.deleteAll(userId);
         live.send(userId, LiveUpdateService.GMAIL_STATUS, GmailStatus.notConnected());
     }
 
@@ -191,6 +196,7 @@ public class GmailSyncService {
                 }
             }
 
+            syncJobAlerts(connection, accessToken, startedAt);
             connection.setLastSyncedAt(startedAt);
             connection.setLastError(null);
         } catch (GmailAuthException e) {
@@ -213,6 +219,22 @@ public class GmailSyncService {
         }
         live.send(userId, LiveUpdateService.GMAIL_STATUS, status(userId));
         return new SyncResult(scanned, detected, updated, review, false);
+    }
+
+    /** Job-alert emails feed "Find jobs"; a problem there must not break status syncing. */
+    private void syncJobAlerts(GmailConnection connection, String accessToken, Instant startedAt) {
+        Instant since = connection.getAlertsSyncedAt() == null
+                ? startedAt.minus(7, ChronoUnit.DAYS)
+                : connection.getAlertsSyncedAt().minus(5, ChronoUnit.MINUTES);
+        try {
+            int added = jobAlerts.syncAlerts(connection.getUserId(), accessToken, since);
+            connection.setAlertsSyncedAt(startedAt);
+            if (added > 0) {
+                live.send(connection.getUserId(), LiveUpdateService.ALERT_JOBS, Map.of("added", added));
+            }
+        } catch (RuntimeException e) {
+            log.warn("Job alert sync failed for user {}: {}", connection.getUserId(), e.toString());
+        }
     }
 
     /** Emails queued for review under older, looser rules that the current rules would ignore. */

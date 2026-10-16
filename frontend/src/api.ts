@@ -6,6 +6,7 @@ import type {
   Dashboard,
   EmailRecord,
   GmailStatus,
+  JobResult,
   JobSearchResponse,
   Me,
   Status,
@@ -87,6 +88,7 @@ export const api = {
   dismissEmail: (id: number) => request<void>(`/api/gmail/emails/${id}/dismiss`, { method: "POST" }),
   undoEmail: (id: number) => request<EmailRecord>(`/api/gmail/emails/${id}/undo`, { method: "POST" }),
 
+  alertJobs: () => request<JobResult[]>("/api/jobs/alerts"),
   searchJobs: (what: string, where: string, page: number) => {
     const params = new URLSearchParams({ what, page: String(page) });
     if (where.trim()) {

@@ -108,6 +108,8 @@ export interface SyncResult {
 
 export interface JobResult {
   id: string;
+  /** ADZUNA, or LINKEDIN / NAUKRI for jobs from his alert emails */
+  source: "ADZUNA" | "LINKEDIN" | "NAUKRI";
   title: string;
   company: string;
   location: string;
@@ -135,7 +137,8 @@ export type LiveEventType =
   | "ACTIVITY"
   | "NOTIFICATION"
   | "EMAILS_CHANGED"
-  | "GMAIL_STATUS";
+  | "GMAIL_STATUS"
+  | "ALERT_JOBS";
 
 export interface LiveEvent {
   type: LiveEventType;

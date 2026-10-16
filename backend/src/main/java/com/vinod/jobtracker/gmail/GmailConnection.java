@@ -40,6 +40,18 @@ public class GmailConnection {
     @Column(name = "last_error", length = 500)
     private String lastError;
 
+    /** When job-alert emails were last read (separate from status emails). */
+    @Column(name = "alerts_synced_at")
+    private Instant alertsSyncedAt;
+
+    public Instant getAlertsSyncedAt() {
+        return alertsSyncedAt;
+    }
+
+    public void setAlertsSyncedAt(Instant alertsSyncedAt) {
+        this.alertsSyncedAt = alertsSyncedAt;
+    }
+
     public Long getId() {
         return id;
     }

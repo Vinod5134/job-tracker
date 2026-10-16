@@ -17,6 +17,8 @@ A real-time job application tracker. Sign in with Google, track applications on 
 - **Real-time sync**: STOMP over WebSocket; open the app on a phone and a laptop and both update instantly
 - **Reminders**: interviews in the next 24 hours, and a "follow up" nudge after 14 days with no reply
 - **Find jobs**: live listings from the Adzuna API, scored against your skills (Java ≠ JavaScript), with a fresher-friendly filter and "Save to tracker"
+  - **From your LinkedIn and Naukri alerts**: jobs pulled from the job-alert emails in your own Gmail (parsed with jsoup; only title, company, location and link are stored, kept 14 days)
+  - One-click buttons that open the same search on LinkedIn, Naukri, Indeed and Foundit (LinkedIn and Naukri have no public job API, and scraping their sites is against their terms)
 - **Dashboard**: totals, response rate, applications per week, upcoming interviews, live activity feed
 
 ## Tech stack

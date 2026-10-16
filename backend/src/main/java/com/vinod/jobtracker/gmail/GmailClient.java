@@ -2,9 +2,12 @@ package com.vinod.jobtracker.gmail;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.vinod.jobtracker.config.SecurityConfig;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
+import java.util.Objects;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.oauth2.client.registration.ClientRegistration;
@@ -104,6 +107,34 @@ public class GmailClient {
         long internalDate = body.path("internalDate").asLong(System.currentTimeMillis());
         return new GmailMessage(id, from, subject, unescape(body.path("snippet").asText("")),
                 Instant.ofEpochMilli(internalDate));
+    }
+
+    /** The email's HTML body (or plain text if it has no HTML part). Used only for job alert emails. */
+    public String getHtmlBody(String accessToken, String id) {
+        JsonNode body = rest.get()
+                .uri(API + "/messages/{id}?format=full", id)
+                .headers(h -> h.setBearerAuth(accessToken))
+                .retrieve()
+                .body(JsonNode.class);
+        if (body == null) {
+            return "";
+        }
+        String html = findPart(body.path("payload"), "text/html");
+        return html != null ? html : Objects.requireNonNullElse(findPart(body.path("payload"), "text/plain"), "");
+    }
+
+    /** Walks the MIME tree and decodes the first part of the given type (Gmail uses base64url). */
+    private static String findPart(JsonNode part, String mimeType) {
+        if (mimeType.equalsIgnoreCase(part.path("mimeType").asText()) && part.path("body").hasNonNull("data")) {
+            return new String(Base64.getUrlDecoder().decode(part.path("body").path("data").asText()), StandardCharsets.UTF_8);
+        }
+        for (JsonNode child : part.path("parts")) {
+            String found = findPart(child, mimeType);
+            if (found != null) {
+                return found;
+            }
+        }
+        return null;
     }
 
     public void revoke(String refreshToken) {

@@ -19,6 +19,7 @@ public class LiveUpdateService {
     public static final String NOTIFICATION = "NOTIFICATION";
     public static final String EMAILS_CHANGED = "EMAILS_CHANGED";
     public static final String GMAIL_STATUS = "GMAIL_STATUS";
+    public static final String ALERT_JOBS = "ALERT_JOBS";
 
     private final SimpMessagingTemplate messaging;
 

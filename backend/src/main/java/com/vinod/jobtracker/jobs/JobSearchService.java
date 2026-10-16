@@ -50,9 +50,33 @@ public class JobSearchService {
         this.applications = applications;
     }
 
-    public record JobResult(String id, String title, String company, String location, String description,
+    /** source: ADZUNA, LINKEDIN or NAUKRI (the last two come from the user's alert emails). */
+    public record JobResult(String id, String source, String title, String company, String location, String description,
                             String url, String postedAt, Double salaryMin, Double salaryMax,
                             int matchScore, List<String> matchedSkills, boolean fresherFriendly, boolean saved) {
+    }
+
+    /** Jobs from the user's LinkedIn / Naukri alert emails, best skill match first, then newest. */
+    public List<JobResult> alertJobs(Long userId, List<AlertJob> alerts) {
+        List<String> skills = UserService.skillList(userService.get(userId));
+        Set<String> savedUrls = savedUrls(userId);
+        List<JobResult> results = new ArrayList<>();
+        for (AlertJob job : alerts) {
+            String text = job.getTitle() + " " + Objects.requireNonNullElse(job.getCompany(), "");
+            SkillMatcher.Match match = SkillMatcher.match(skills, text);
+            results.add(new JobResult("alert-" + job.getId(), job.getSource().name(), job.getTitle(),
+                    Objects.requireNonNullElse(job.getCompany(), ""), Objects.requireNonNullElse(job.getLocation(), ""),
+                    "", job.getUrl(), job.getReceivedAt().toString(), null, null, match.score(), match.matched(),
+                    SkillMatcher.fresherFriendly(job.getTitle()), savedUrls.contains(job.getUrl())));
+        }
+        results.sort(Comparator.comparingInt(JobResult::matchScore).reversed()
+                .thenComparing(JobResult::postedAt, Comparator.reverseOrder()));
+        return results;
+    }
+
+    private Set<String> savedUrls(Long userId) {
+        return applications.findByUserIdOrderByUpdatedAtDesc(userId).stream()
+                .map(JobApplication::getJobUrl).filter(Objects::nonNull).collect(Collectors.toSet());
     }
 
     public record JobSearchResponse(long total, int page, List<JobResult> results) {
@@ -126,8 +150,7 @@ public class JobSearchService {
         }
 
         List<String> skills = UserService.skillList(userService.get(userId));
-        Set<String> savedUrls = applications.findByUserIdOrderByUpdatedAtDesc(userId).stream()
-                .map(JobApplication::getJobUrl).filter(Objects::nonNull).collect(Collectors.toSet());
+        Set<String> savedUrls = savedUrls(userId);
 
         List<JobResult> results = new ArrayList<>();
         for (JsonNode job : body.path("results")) {
@@ -140,6 +163,7 @@ public class JobSearchService {
             SkillMatcher.Match match = SkillMatcher.match(skills, title + " " + description);
             results.add(new JobResult(
                     job.path("id").asText(),
+                    "ADZUNA",
                     title,
                     job.path("company").path("display_name").asText("Unknown company"),
                     job.path("location").path("display_name").asText(""),
