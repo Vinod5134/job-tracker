@@ -29,6 +29,13 @@ public record AppProperties(
     }
 
     public record Adzuna(String appId, String appKey, String country) {
+
+        public Adzuna {
+            // Pasted keys often carry a stray space or newline
+            appId = appId == null ? null : appId.trim();
+            appKey = appKey == null ? null : appKey.trim();
+        }
+
         public boolean configured() {
             return appId != null && !appId.isBlank() && appKey != null && !appKey.isBlank();
         }

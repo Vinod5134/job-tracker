@@ -18,6 +18,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.util.UriComponentsBuilder;
 
@@ -74,6 +75,20 @@ public class JobSearchService {
         JsonNode body;
         try {
             body = rest.get().uri(target).retrieve().body(JsonNode.class);
+        } catch (RestClientResponseException e) {
+            // Log Adzuna's own reason (the URL with the keys is not part of this message)
+            log.warn("Adzuna search failed: HTTP {} {}", e.getStatusCode().value(),
+                    e.getResponseBodyAsString().replaceAll("\\s+", " "));
+            int code = e.getStatusCode().value();
+            if (code == 401 || code == 403) {
+                throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
+                        "Adzuna rejected the API keys. Check ADZUNA_APP_ID and ADZUNA_APP_KEY in Render.");
+            }
+            if (code == 400) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Adzuna couldn't run that search. Try a simpler title or a different city.");
+            }
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Job search is unavailable right now. Try again.");
         } catch (RestClientException e) {
             log.warn("Adzuna search failed: {}", e.getMessage());
             throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Job search is unavailable right now. Try again.");
