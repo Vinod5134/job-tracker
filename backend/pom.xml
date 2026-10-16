@@ -66,6 +66,18 @@
             <artifactId>ojdbc11</artifactId>
             <scope>runtime</scope>
         </dependency>
+        <!-- MySQL (e.g. Aiven free tier) -->
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <!-- PostgreSQL (e.g. Aiven / Neon free tier) -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
         <!-- H2 in Oracle mode (local development, no setup needed) -->
         <dependency>
             <groupId>com.h2database</groupId>

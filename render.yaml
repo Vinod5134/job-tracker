@@ -10,8 +10,9 @@ services:
     region: singapore
     healthCheckPath: /actuator/health
     envVars:
+      # mysql (Aiven MySQL), postgres (Aiven/Neon PostgreSQL) or oracle
       - key: SPRING_PROFILES_ACTIVE
-        value: oracle
+        value: mysql
       - key: FRONTEND_URL
         sync: false
       - key: GOOGLE_CLIENT_ID

@@ -22,7 +22,7 @@ A real-time job application tracker. Sign in with Google, track applications on 
 | Layer | Technology |
 |---|---|
 | Backend | Java 17, Spring Boot 3, Spring MVC, Spring Security (OAuth2 client + resource server), Spring Data JPA, Hibernate, Spring WebSocket (STOMP), Spring Scheduling |
-| Database | Oracle Database (production, Oracle Autonomous DB free tier), H2 in Oracle mode (local) |
+| Database | MySQL (production, Aiven free tier); PostgreSQL and Oracle also supported through Spring profiles; H2 (local) |
 | API | RESTful JSON APIs, Bean Validation, global error handling, Swagger / OpenAPI |
 | Frontend | TypeScript, HTML, CSS (no framework), Vite, `@stomp/stompjs` |
 | Integrations | Google OAuth2, Gmail REST API, Adzuna Jobs API |
@@ -36,7 +36,7 @@ A real-time job application tracker. Sign in with Google, track applications on 
 flowchart LR
     Browser["Browser (TypeScript)"] -- "REST + JWT" --> API["Spring Boot API (Render)"]
     Browser <-- "WebSocket (STOMP)" --> API
-    API -- "JPA / Hibernate" --> DB[("Oracle DB")]
+    API -- "JPA / Hibernate" --> DB[("MySQL")]
     API -- "OAuth2 sign-in" --> Google["Google"]
     API -- "read-only, every 10 min" --> Gmail["Gmail API"]
     API -- "job search" --> Adzuna["Adzuna API"]
@@ -106,7 +106,22 @@ On Windows PowerShell, set variables with `$env:GOOGLE_CLIENT_ID="..."` and run 
 
 ## Deploy
 
-### 1. Database: Oracle Autonomous Database (Always Free)
+### 1. Database: Aiven MySQL (free, no card)
+
+1. Sign up at https://console.aiven.io (Google or GitHub sign-in works).
+2. **Create service** → **MySQL** → plan **Free** → pick a region close to Render's (for example Singapore) → name it `job-tracker-db` → **Create**.
+3. Wait until the status is **Running**, then open the service **Overview** and copy **Host**, **Port**, **User** and **Password**.
+4. Set the Render variables:
+   - `DB_URL` = `jdbc:mysql://<host>:<port>/defaultdb?sslMode=REQUIRED`
+   - `DB_USERNAME` = the user (usually `avnadmin`)
+   - `DB_PASSWORD` = the password
+
+Hibernate creates the tables on first start (`ddl-auto: update`).
+
+**Other databases:** the same code runs on PostgreSQL (set `SPRING_PROFILES_ACTIVE=postgres` and `DB_URL=jdbc:postgresql://<host>:<port>/defaultdb?sslmode=require`) or Oracle (see below, `SPRING_PROFILES_ACTIVE=oracle`).
+
+<details>
+<summary>Oracle Autonomous Database setup</summary>
 
 1. Create a free account at https://cloud.oracle.com (a card is asked for verification; Always Free resources aren't charged).
 2. **Oracle Database > Autonomous Database > Create**: workload **Transaction Processing**, toggle **Always Free**, set an ADMIN password.
@@ -120,6 +135,8 @@ On Windows PowerShell, set variables with `$env:GOOGLE_CLIENT_ID="..."` and run 
    ```
    Hibernate creates the tables on first start (`ddl-auto: update`).
 
+</details>
+
 ### 2. Backend on Render
 
 1. Push this repo to GitHub.
@@ -130,7 +147,7 @@ On Windows PowerShell, set variables with `$env:GOOGLE_CLIENT_ID="..."` and run 
    |---|---|
    | `FRONTEND_URL` | `https://<your-app>.vercel.app` (no trailing slash) |
    | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | from Google Cloud |
-   | `DB_URL` / `DB_USERNAME` / `DB_PASSWORD` | from Oracle |
+   | `DB_URL` / `DB_USERNAME` / `DB_PASSWORD` | from Aiven (see step 1) |
    | `ADZUNA_APP_ID` / `ADZUNA_APP_KEY` | free key from https://developer.adzuna.com (optional; without it "Find jobs" shows a setup message) |
 
    `JWT_SECRET` and `ENCRYPTION_KEY` are generated automatically.

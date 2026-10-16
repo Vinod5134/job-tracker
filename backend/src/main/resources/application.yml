@@ -7,7 +7,7 @@ spring:
   application:
     name: job-tracker
   profiles:
-    # "dev" = H2 file database (no setup). Use "oracle" in production.
+    # "dev" = H2 file database (no setup). Production: "mysql", "postgres" or "oracle".
     active: ${SPRING_PROFILES_ACTIVE:dev}
   jpa:
     open-in-view: false
@@ -87,3 +87,31 @@ spring:
       maximum-pool-size: 5
   jpa:
     database-platform: org.hibernate.dialect.OracleDialect
+
+---
+spring:
+  config:
+    activate:
+      on-profile: mysql
+  datasource:
+    # Aiven MySQL: jdbc:mysql://<host>:<port>/defaultdb?sslMode=REQUIRED
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 5
+
+---
+spring:
+  config:
+    activate:
+      on-profile: postgres
+  datasource:
+    # Aiven PostgreSQL: jdbc:postgresql://<host>:<port>/defaultdb?sslmode=require
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 5
