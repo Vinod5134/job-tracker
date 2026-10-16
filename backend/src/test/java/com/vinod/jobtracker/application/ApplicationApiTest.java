@@ -37,6 +37,9 @@ class ApplicationApiTest {
     @Autowired
     private ObjectMapper json;
 
+    @Autowired
+    private ApplicationService applicationService;
+
     private Long vinod;
     private Long otherUser;
 
@@ -103,6 +106,25 @@ class ApplicationApiTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.fieldErrors.company").exists())
                 .andExpect(jsonPath("$.fieldErrors.jobUrl").exists());
+    }
+
+    @Test
+    void undoRemovesCardCreatedByEmailAndRestoresStatus() throws Exception {
+        var created = applicationService.applyEmailUpdate(vinod, "Kusama Network", null, ApplicationStatus.APPLIED, false)
+                .orElseThrow();
+        assertThat(created.created()).isTrue();
+        applicationService.revertEmailUpdate(vinod, created.application().id(), true, null, ApplicationStatus.APPLIED);
+        mvc.perform(as(vinod, get("/api/applications/" + created.application().id()))).andExpect(status().isNotFound());
+
+        var moved = applicationService.applyEmailUpdate(vinod, "Kusama Network", null, ApplicationStatus.APPLIED, false)
+                .orElseThrow();
+        var interview = applicationService.applyEmailUpdate(vinod, "Kusama Network Pvt Ltd", null,
+                ApplicationStatus.INTERVIEW, false).orElseThrow();
+        assertThat(interview.previousStatus()).isEqualTo(ApplicationStatus.APPLIED);
+        applicationService.revertEmailUpdate(vinod, moved.application().id(), false,
+                interview.previousStatus(), ApplicationStatus.INTERVIEW);
+        mvc.perform(as(vinod, get("/api/applications/" + moved.application().id())))
+                .andExpect(jsonPath("$.status").value("APPLIED"));
     }
 
     @Test

@@ -30,6 +30,10 @@ public final class ApplicationDtos {
     public record StatusRequest(@NotNull ApplicationStatus status) {
     }
 
+    /** What an email changed, so it can be undone: the card, its status before, and whether it was new. */
+    public record EmailUpdate(ApplicationResponse application, ApplicationStatus previousStatus, boolean created) {
+    }
+
     public record ApplicationResponse(
             Long id, String company, String jobRole, String location, JobSource source,
             ApplicationStatus status, String jobUrl, LocalDate appliedOn, Instant interviewAt,

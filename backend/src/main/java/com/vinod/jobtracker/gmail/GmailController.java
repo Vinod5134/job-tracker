@@ -69,6 +69,11 @@ public class GmailController {
         return service.accept(CurrentUser.id(jwt), id, request.company(), request.status(), request.role());
     }
 
+    @PostMapping("/emails/{id}/undo")
+    public EmailRecordResponse undo(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id) {
+        return service.undo(CurrentUser.id(jwt), id);
+    }
+
     @PostMapping("/emails/{id}/dismiss")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void dismiss(@AuthenticationPrincipal Jwt jwt, @PathVariable Long id) {

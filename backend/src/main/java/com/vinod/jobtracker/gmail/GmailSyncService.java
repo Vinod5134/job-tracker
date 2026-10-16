@@ -1,6 +1,7 @@
 package com.vinod.jobtracker.gmail;
 
 import com.vinod.jobtracker.application.ApplicationDtos.ApplicationResponse;
+import com.vinod.jobtracker.application.ApplicationDtos.EmailUpdate;
 import com.vinod.jobtracker.application.ApplicationService;
 import com.vinod.jobtracker.application.ApplicationStatus;
 import com.vinod.jobtracker.common.BadRequestException;
@@ -140,6 +141,7 @@ public class GmailSyncService {
         int detected = 0;
         int updated = 0;
         int review = 0;
+        dismissNoiseInReview(userId);
         try {
             String accessToken = gmail.refreshAccessToken(cipher.decrypt(connection.getRefreshTokenEncrypted()));
             String query = "after:" + since.getEpochSecond() + " " + SEARCH;
@@ -168,13 +170,13 @@ public class GmailSyncService {
                 record.setDetectedRole(insight.role());
 
                 if (insight.highConfidence()) {
-                    Optional<ApplicationResponse> changed = applicationService.applyEmailUpdate(
+                    Optional<EmailUpdate> changed = applicationService.applyEmailUpdate(
                             userId, insight.company(), insight.role(), insight.status(), false);
                     if (changed.isPresent()) {
                         record.setState(EmailRecord.State.AUTO_APPLIED);
-                        record.setApplicationId(changed.get().id());
+                        remember(record, changed.get());
                         updated++;
-                        notifyDetected(userId, changed.get());
+                        notifyDetected(userId, changed.get().application());
                     } else {
                         record.setState(EmailRecord.State.NO_CHANGE);
                     }
@@ -211,6 +213,17 @@ public class GmailSyncService {
         }
         live.send(userId, LiveUpdateService.GMAIL_STATUS, status(userId));
         return new SyncResult(scanned, detected, updated, review, false);
+    }
+
+    /** Emails queued for review under older, looser rules that the current rules would ignore. */
+    private void dismissNoiseInReview(Long userId) {
+        for (EmailRecord record : records.findTop50ByUserIdAndStateInOrderByReceivedAtDesc(
+                userId, List.of(EmailRecord.State.NEEDS_REVIEW))) {
+            if (classifier.isNoise(record.getFrom(), record.getSubject())) {
+                record.setState(EmailRecord.State.DISMISSED);
+                records.save(record);
+            }
+        }
     }
 
     private void notifyDetected(Long userId, ApplicationResponse app) {
@@ -255,7 +268,7 @@ public class GmailSyncService {
             throw new BadRequestException("Choose a status");
         }
         applicationService.applyEmailUpdate(userId, company.trim(), blankToNull(role), status, true)
-                .ifPresent(app -> record.setApplicationId(app.id()));
+                .ifPresent(update -> remember(record, update));
         record.setDetectedCompany(company.trim());
         record.setDetectedStatus(status);
         record.setDetectedRole(blankToNull(role));
@@ -263,6 +276,30 @@ public class GmailSyncService {
         EmailRecord saved = records.save(record);
         live.send(userId, LiveUpdateService.EMAILS_CHANGED, status(userId));
         return EmailRecordResponse.from(saved);
+    }
+
+    /** Reverts a board change made from this email (wrong company, not a real update, ...). */
+    @Transactional
+    public EmailRecordResponse undo(Long userId, Long recordId) {
+        EmailRecord record = records.findByIdAndUserId(recordId, userId)
+                .orElseThrow(() -> new NotFoundException("Email not found"));
+        boolean changedBoard = record.getState() == EmailRecord.State.AUTO_APPLIED
+                || record.getState() == EmailRecord.State.ACCEPTED;
+        if (!changedBoard || record.getApplicationId() == null) {
+            throw new BadRequestException("This email didn't change your board");
+        }
+        applicationService.revertEmailUpdate(userId, record.getApplicationId(), record.getCreatedCard(),
+                record.getPreviousStatus(), record.getDetectedStatus());
+        record.setState(EmailRecord.State.DISMISSED);
+        EmailRecord saved = records.save(record);
+        live.send(userId, LiveUpdateService.EMAILS_CHANGED, status(userId));
+        return EmailRecordResponse.from(saved);
+    }
+
+    private static void remember(EmailRecord record, EmailUpdate update) {
+        record.setApplicationId(update.application().id());
+        record.setPreviousStatus(update.previousStatus());
+        record.setCreatedCard(update.created());
     }
 
     @Transactional

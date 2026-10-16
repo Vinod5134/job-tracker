@@ -1,6 +1,7 @@
 package com.vinod.jobtracker.gmail;
 
 import com.vinod.jobtracker.application.ApplicationStatus;
+import com.vinod.jobtracker.application.CompanyNames;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
@@ -11,12 +12,19 @@ import java.util.regex.Pattern;
 import org.springframework.stereotype.Component;
 
 /**
- * Rule-based classifier: reads an email's sender, subject and short preview and decides
- * whether it's about a job application, what the status is, and which company it's from.
+ * Rule-based classifier: decides whether an email is a real update about one of the user's
+ * job applications, and if so the status and company.
+ *
+ * Trust comes from the sender first, the subject second:
+ * - EMPLOYER: the company's own domain (careers@tcs.com) or a hiring tool (Workday, Greenhouse...)
+ *   -> any status, board updates automatically when the company is clear
+ * - JOB_BOARD: Naukri, LinkedIn, Indeed... -> only real application confirmations count;
+ *   interview/offer claims from a board go to "Needs review" (boards relay recruiter mass mail)
+ * - PERSONAL: gmail/outlook senders (recruiters, consultancies) -> interview/offer only, always reviewed
+ * - BLOCKED / unknown sites: ignored (review sites, newsletters, "job update" spam)
  *
  * It's deliberately simple and explainable (keyword rules, no ML). When it isn't sure,
- * it returns highConfidence=false and the email goes to "Needs review" instead of
- * changing the board.
+ * it returns highConfidence=false so the email waits in "Needs review".
  */
 @Component
 public class EmailClassifier {
@@ -24,12 +32,27 @@ public class EmailClassifier {
     public record EmailInsight(ApplicationStatus status, String company, String role, boolean highConfidence) {
     }
 
-    /** Subjects of marketing / alert emails that look job-related but aren't about an application. */
+    enum SenderType { EMPLOYER, JOB_BOARD, PERSONAL, BLOCKED, UNKNOWN }
+
+    /** Marketing / alert subjects that look job-related but aren't about one of his applications. */
     private static final List<Pattern> IGNORE_SUBJECT = compile(
             "job alert", "jobs? for you", "recommended jobs?", "jobs? matching", "matching your profile",
             "apply now", "new jobs?", "\\b(is|are) hiring\\b", "viewed your profile", "newsletter", "webinar",
             "\\botp\\b", "verify your (email|account)", "password", "complete your profile", "similar jobs",
-            "jobs you may", "top jobs");
+            "jobs you may", "top jobs", "what employees", "employees have to say", "company reviews", "write a review",
+            "salary insights", "invites? you to apply", "you may be (a )?(good )?fit", "people (also )?viewed");
+
+    /** Bulk-hiring ads. Ignored unless they come from the employer itself. */
+    private static final List<Pattern> MARKETING_SUBJECT = compile(
+            "walk[- ]?ins?\\b", "\\bregister\\b", "hiring drive", "job fair", "urgent(ly)? (hiring|requirement|opening)",
+            "openings?\\b", "vacanc", "\\bwebinar\\b", "\\bmega\\b", "reminder");
+
+    /** On job boards, only these subjects are real updates about an application he made. */
+    private static final List<Pattern> BOARD_CONFIRMATION = compile(
+            "application (was |has been )?(sent|submitted|received|viewed)", "(you|you've|you have) (successfully )?applied",
+            "applied (to|for)", "received your application", "viewed your application", "application status",
+            "status of your application", "shortlisted", "interview", "not (been )?(selected|shortlisted)",
+            "unfortunately", "regret", "offer");
 
     private static final List<Pattern> OFFER = compile(
             "offer letter", "pleased to offer", "extend(ing)? (you )?(an|the|a) offer", "job offer",
@@ -48,28 +71,37 @@ public class EmailClassifier {
             "thank(s| you) for applying", "thank you for your (interest|application)",
             "application (has been |was )?(received|submitted|sent|viewed)", "applied (for|to)", "you applied",
             "your application (for|to|at|with)", "successfully applied", "received your application",
-            "applied successfully");
+            "applied successfully", "viewed your application");
 
     /** Phrases like "if you are shortlisted, we will call you for an interview" don't mean an interview. */
     private static final Pattern CONDITIONAL = Pattern.compile(
             "if (you are |you're |your profile is )?(shortlisted|selected)[^.]*", Pattern.CASE_INSENSITIVE);
 
-    /** Job boards: their sender name is the board, not the employer. */
+    /** Job boards: real confirmations come from here, but so does a lot of marketing. */
     private static final Set<String> JOB_BOARDS = Set.of(
             "naukri", "linkedin", "indeed", "foundit", "monster", "monsterindia", "shine", "instahyre", "cutshort",
-            "wellfound", "angel", "internshala", "hirist", "iimjobs", "apna", "glassdoor", "timesjobs", "freshersworld");
+            "wellfound", "internshala", "hirist", "iimjobs", "apna", "timesjobs", "freshersworld", "unstop");
 
-    /** Hiring tools and free mail: the sender name may be the employer, but the domain isn't. */
-    private static final Set<String> NON_EMPLOYER_DOMAINS = Set.of(
-            "gmail", "googlemail", "yahoo", "outlook", "hotmail", "live", "rediffmail", "icloud", "google",
+    /** Hiring tools that send mail on the employer's behalf: treated like the employer. */
+    private static final Set<String> HIRING_TOOLS = Set.of(
             "myworkday", "myworkdayjobs", "workday", "greenhouse", "greenhouse-mail", "lever", "hire", "smartrecruiters",
-            "icims", "successfactors", "taleo", "oraclecloud", "keka", "darwinbox", "zohorecruit", "zoho", "freshteam",
-            "hackerrank", "hackerearth", "mettl", "codility", "amcat", "email", "mail", "mailer", "sendgrid", "amazonses");
+            "icims", "successfactors", "taleo", "oraclecloud", "keka", "darwinbox", "zohorecruit", "freshteam",
+            "hackerrank", "hackerearth", "mettl", "codility", "amcat", "superset", "eightfold", "phenom", "jobvite");
+
+    private static final Set<String> FREE_MAIL = Set.of(
+            "gmail", "googlemail", "yahoo", "outlook", "hotmail", "live", "rediffmail", "icloud", "proton", "protonmail");
+
+    /** Review sites, aggregators and bulk "job update" senders that aren't about his own applications. */
+    private static final Set<String> BLOCKED = Set.of(
+            "ambitionbox", "glassdoor", "skilluo", "techslash", "jobhai", "workindia", "quikr", "olx", "timesascent",
+            "jooble", "adzuna", "careerjet", "simplyhired", "talent", "jobrapido", "whatjobs", "google", "youtube",
+            "coursera", "udemy", "unacademy", "simplilearn", "scaler", "geeksforgeeks", "medium", "substack");
 
     private static final Set<String> NOT_A_COMPANY = Set.of(
             "the", "our", "your", "you", "us", "we", "team", "naukri", "linkedin", "indeed", "interview", "application",
             "applications", "job", "jobs", "update", "status", "invitation", "hiring", "careers", "career", "hr",
-            "re", "fwd", "fw", "regarding", "important", "action required", "reminder", "next steps", "thank you");
+            "re", "fwd", "fw", "regarding", "important", "action required", "reminder", "next steps", "thank you",
+            "hi", "hello", "dear", "hey", "congratulations", "urgent", "new", "your application");
 
     private static final Pattern NAME = Pattern.compile(
             "([A-Z0-9][\\w&.'-]*(?:\\s+(?:[A-Z0-9][\\w&.'-]*|&|of|and)){0,4})");
@@ -92,14 +124,25 @@ public class EmailClassifier {
     public EmailInsight classify(String from, String subject, String snippet) {
         String safeSubject = subject == null ? "" : subject.trim();
         String safeSnippet = snippet == null ? "" : snippet;
+        Sender sender = parseSender(from);
 
-        for (Pattern p : IGNORE_SUBJECT) {
-            if (p.matcher(safeSubject).find()) {
-                return null;
-            }
+        if (sender.type() == SenderType.BLOCKED || sender.type() == SenderType.UNKNOWN) {
+            return null;
+        }
+        if (matchesAny(IGNORE_SUBJECT, safeSubject)) {
+            return null;
+        }
+        if (sender.type() != SenderType.EMPLOYER && matchesAny(MARKETING_SUBJECT, safeSubject)) {
+            return null;
+        }
+        // Boards send far more marketing than confirmations: the subject itself must be a confirmation
+        if (sender.type() == SenderType.JOB_BOARD && !matchesAny(BOARD_CONFIRMATION, safeSubject)) {
+            return null;
         }
 
-        String text = CONDITIONAL.matcher(safeSubject + " . " + safeSnippet).replaceAll(" ");
+        // For job boards and personal senders, trust only the subject (previews contain ads and footers)
+        String text = sender.type() == SenderType.EMPLOYER ? safeSubject + " . " + safeSnippet : safeSubject;
+        text = CONDITIONAL.matcher(text).replaceAll(" ");
         EnumSet<ApplicationStatus> found = EnumSet.noneOf(ApplicationStatus.class);
         if (matchesAny(OFFER, text)) {
             found.add(ApplicationStatus.OFFER);
@@ -125,70 +168,101 @@ public class EmailClassifier {
         // "Thanks for applying ... interview process" could be either, so ask the user
         boolean ambiguous = status == ApplicationStatus.INTERVIEW && found.contains(ApplicationStatus.APPLIED);
 
-        CompanyGuess company = companyFromSubject(safeSubject);
-        if (company == null) {
-            company = companyFromSender(from);
-        }
+        String company = companyFromSubject(safeSubject);
         String role = roleFromSubject(safeSubject);
 
-        boolean high = !ambiguous && company != null && company.reliable();
-        return new EmailInsight(status, company == null ? null : company.name(), role, high);
-    }
-
-    private record CompanyGuess(String name, boolean reliable) {
-    }
-
-    private CompanyGuess companyFromSubject(String subject) {
-        // "at X" is the most reliable ("... Java Developer at Capgemini"), "to X" the least
-        for (String preposition : List.of("at", "with", "from", "by", "to")) {
-            Matcher m = Pattern.compile("\\b" + preposition + "\\s+" + NAME.pattern()).matcher(subject);
-            while (m.find()) {
-                String candidate = clean(m.group(1));
-                if (candidate != null) {
-                    return new CompanyGuess(candidate, true);
+        return switch (sender.type()) {
+            case EMPLOYER -> {
+                if (company == null) {
+                    company = sender.companyName();
                 }
+                // The company in the subject must be the sender's own company (or come via a hiring tool),
+                // otherwise someone else is talking about that company
+                boolean consistent = sender.viaHiringTool() || company == null
+                        || sender.domainLabel() == null || sameAsDomain(company, sender.domainLabel())
+                        || (sender.companyName() != null && CompanyNames.sameCompany(company, sender.companyName()));
+                if (!consistent) {
+                    yield null;
+                }
+                yield new EmailInsight(status, company, role, !ambiguous && company != null);
             }
-        }
-        Matcher prefix = SUBJECT_PREFIX.matcher(subject);
-        if (prefix.find()) {
-            String candidate = clean(prefix.group(1));
-            if (candidate != null) {
-                return new CompanyGuess(candidate, true);
+            case JOB_BOARD -> {
+                if (company == null) {
+                    yield null;
+                }
+                // A board relaying "interview" or "offer" is often recruiter mass mail: let the user confirm
+                boolean confirmed = status == ApplicationStatus.APPLIED || status == ApplicationStatus.REJECTED;
+                yield new EmailInsight(status, company, role, confirmed && !ambiguous);
             }
-        }
-        return null;
+            case PERSONAL -> status == ApplicationStatus.APPLIED
+                    ? null
+                    : new EmailInsight(status, company, role, false);
+            default -> null;
+        };
     }
 
-    private CompanyGuess companyFromSender(String from) {
+    /**
+     * True when the current rules would skip this email outright, judged on sender and subject only.
+     * Used to clear out "Needs review" items saved by older, looser rules.
+     */
+    public boolean isNoise(String from, String subject) {
+        String safeSubject = subject == null ? "" : subject;
+        Sender sender = parseSender(from);
+        return sender.type() == SenderType.BLOCKED || sender.type() == SenderType.UNKNOWN
+                || matchesAny(IGNORE_SUBJECT, safeSubject)
+                || (sender.type() != SenderType.EMPLOYER && matchesAny(MARKETING_SUBJECT, safeSubject))
+                || (sender.type() == SenderType.JOB_BOARD && !matchesAny(BOARD_CONFIRMATION, safeSubject));
+    }
+
+    private record Sender(SenderType type, String domainLabel, String companyName, boolean viaHiringTool) {
+    }
+
+    private Sender parseSender(String from) {
         if (from == null || from.isBlank()) {
-            return null;
+            return new Sender(SenderType.UNKNOWN, null, null, false);
         }
         String displayName = from.contains("<") ? from.substring(0, from.indexOf('<')).replace("\"", "").trim() : "";
-        String address = from.contains("<") ? from.substring(from.indexOf('<') + 1, from.indexOf('>') > 0 ? from.indexOf('>') : from.length())
+        int close = from.indexOf('>');
+        String address = from.contains("<")
+                ? from.substring(from.indexOf('<') + 1, close > 0 ? close : from.length())
                 : from.trim();
-        String domainLabel = domainLabel(address);
-        if (domainLabel != null && JOB_BOARDS.contains(domainLabel)) {
-            // e.g. Naukri / LinkedIn notifications: the employer must come from the subject
-            return null;
+        String label = domainLabel(address);
+        if (label == null) {
+            return new Sender(SenderType.UNKNOWN, null, null, false);
+        }
+        if (BLOCKED.contains(label)) {
+            return new Sender(SenderType.BLOCKED, label, null, false);
+        }
+        if (JOB_BOARDS.contains(label)) {
+            return new Sender(SenderType.JOB_BOARD, label, null, false);
+        }
+        if (FREE_MAIL.contains(label)) {
+            return new Sender(SenderType.PERSONAL, label, null, false);
         }
 
-        if (!displayName.isEmpty()) {
-            Matcher hiring = HIRING_WORDS.matcher(displayName);
-            boolean looksLikeOrg = hiring.find();
-            String cleaned = clean(HIRING_WORDS.matcher(displayName).replaceAll(" ").replaceAll("\\s+", " ").trim());
-            if (cleaned != null) {
-                boolean matchesDomain = domainLabel != null && !NON_EMPLOYER_DOMAINS.contains(domainLabel)
-                        && cleaned.toLowerCase(Locale.ROOT).replace(" ", "").contains(domainLabel);
-                // A plain person's name ("Priya Sharma") is a weak signal, so it needs review
-                return new CompanyGuess(cleaned, looksLikeOrg || matchesDomain);
-            }
+        String cleanedName = clean(HIRING_WORDS.matcher(displayName).replaceAll(" ").replaceAll("\\s+", " ").trim());
+        if (HIRING_TOOLS.contains(label)) {
+            // e.g. "Capgemini Recruiting <no-reply@myworkday.com>": the display name is the employer
+            return new Sender(SenderType.EMPLOYER, null, cleanedName, true);
         }
-        if (domainLabel != null && !NON_EMPLOYER_DOMAINS.contains(domainLabel)) {
-            String name = domainLabel.length() <= 4 ? domainLabel.toUpperCase(Locale.ROOT)
-                    : Character.toUpperCase(domainLabel.charAt(0)) + domainLabel.substring(1);
-            return new CompanyGuess(name, true);
+        // A company domain is only trusted when the sender looks like that company's hiring team
+        // (display name mentions the company or careers/HR) - this keeps out generic newsletters
+        boolean hiringSender = HIRING_WORDS.matcher(displayName).find() || HIRING_WORDS.matcher(address).find()
+                || displayName.isEmpty()
+                || (cleanedName != null && sameAsDomain(cleanedName, label));
+        if (!hiringSender) {
+            return new Sender(SenderType.UNKNOWN, label, null, false);
         }
-        return null;
+        String domainName = label.length() <= 4 ? label.toUpperCase(Locale.ROOT)
+                : Character.toUpperCase(label.charAt(0)) + label.substring(1);
+        String company = cleanedName != null && sameAsDomain(cleanedName, label) ? cleanedName : domainName;
+        return new Sender(SenderType.EMPLOYER, label, company, false);
+    }
+
+    private static boolean sameAsDomain(String company, String domainLabel) {
+        String compact = CompanyNames.normalize(company).replace(" ", "");
+        String label = domainLabel.toLowerCase(Locale.ROOT).replace("-", "");
+        return !compact.isEmpty() && (compact.contains(label) || label.contains(compact));
     }
 
     /** careers@mail.tcs.com -> "tcs", hr@infosys.co.in -> "infosys". */
@@ -206,6 +280,24 @@ public class EmailClassifier {
             label = parts[parts.length - 3];
         }
         return label.isBlank() ? null : label;
+    }
+
+    private String companyFromSubject(String subject) {
+        // "at X" is the most reliable ("... Java Developer at Capgemini"), "to X" the least
+        for (String preposition : List.of("at", "with", "from", "by", "to")) {
+            Matcher m = Pattern.compile("\\b" + preposition + "\\s+" + NAME.pattern()).matcher(subject);
+            while (m.find()) {
+                String candidate = clean(m.group(1));
+                if (candidate != null) {
+                    return candidate;
+                }
+            }
+        }
+        Matcher prefix = SUBJECT_PREFIX.matcher(subject);
+        if (prefix.find()) {
+            return clean(prefix.group(1));
+        }
+        return null;
     }
 
     private String roleFromSubject(String subject) {
@@ -228,11 +320,8 @@ public class EmailClassifier {
         if (c.length() < 2 || c.length() > 80 || NOT_A_COMPANY.contains(c.toLowerCase(Locale.ROOT))) {
             return null;
         }
-        List<String> words = new ArrayList<>(List.of(c.split("\\s+")));
-        if (NOT_A_COMPANY.contains(words.get(0).toLowerCase(Locale.ROOT))) {
-            return null;
-        }
-        return c;
+        String firstWord = c.split("\\s+")[0].toLowerCase(Locale.ROOT);
+        return NOT_A_COMPANY.contains(firstWord) ? null : c;
     }
 
     private static boolean matchesAny(List<Pattern> patterns, String text) {

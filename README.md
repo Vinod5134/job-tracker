@@ -12,6 +12,8 @@ A real-time job application tracker. Sign in with Google, track applications on 
   - High confidence: the board updates on its own, plus a live notification
   - Low confidence: the email goes to **Needs review** for a one-click confirm
   - Emails never move a card backwards (an old "application received" can't undo "Interview")
+  - Trust comes from the sender: the employer's own domain or hiring tool (Workday, Greenhouse...) can update the board; job boards only for real application confirmations; review sites, job-update spam and walk-in ads are ignored
+  - Every automatic change has an **Undo**
 - **Real-time sync**: STOMP over WebSocket; open the app on a phone and a laptop and both update instantly
 - **Reminders**: interviews in the next 24 hours, and a "follow up" nudge after 14 days with no reply
 - **Find jobs**: live listings from the Adzuna API, scored against your skills (Java ≠ JavaScript), with a fresher-friendly filter and "Save to tracker"

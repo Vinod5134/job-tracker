@@ -2,7 +2,7 @@ import { api } from "../api";
 import { errorBox, h, loading } from "../dom";
 import { timeAgo } from "../format";
 import { onLive } from "../live";
-import { toastError } from "../toast";
+import { toast, toastError } from "../toast";
 import { STATUSES, STATUS_LABEL, type EmailRecord, type Status } from "../types";
 
 const STATE_LABEL: Record<EmailRecord["state"], string> = {
@@ -134,8 +134,32 @@ export function renderEmails(root: HTMLElement, params: URLSearchParams): () => 
     return card;
   };
 
-  const logRow = (email: EmailRecord) =>
-    h(
+  const logRow = (email: EmailRecord) => {
+    const changedBoard = (email.state === "AUTO_APPLIED" || email.state === "ACCEPTED") && email.applicationId !== null;
+    const undo = changedBoard
+      ? h(
+          "button",
+          {
+            class: "btn btn-ghost btn-small",
+            type: "button",
+            title: "Remove the card this email added, or put its status back",
+            onClick: async () => {
+              const label = email.detectedCompany ?? "this company";
+              if (!window.confirm(`Undo the board change for ${label}?`)) {
+                return;
+              }
+              try {
+                await api.undoEmail(email.id);
+                toast({ title: "Board change undone", message: label, level: "success" }, 3000);
+              } catch (e) {
+                toastError((e as Error).message);
+              }
+            },
+          },
+          "Undo",
+        )
+      : null;
+    return h(
       "div",
       { class: "email-row" },
       h("div", null, h("p", { class: "email-subject" }, email.subject || "(no subject)"), h("p", { class: "muted small" }, `${email.from ?? ""} · ${timeAgo(email.receivedAt)}`)),
@@ -145,15 +169,17 @@ export function renderEmails(root: HTMLElement, params: URLSearchParams): () => 
         email.detectedCompany ? h("span", { class: "pill" }, email.detectedCompany) : null,
         email.detectedStatus ? h("span", { class: "pill pill-accent" }, STATUS_LABEL[email.detectedStatus]) : null,
         h("span", { class: `pill state-${email.state.toLowerCase()}` }, STATE_LABEL[email.state]),
+        undo,
       ),
     );
+  };
 
   root.replaceChildren(
     h(
       "div",
       { class: "page" },
       h("div", { class: "page-head" }, h("h1", null, "Emails")),
-      h("p", { class: "muted" }, "Only the sender, subject and what was detected are saved, never the email body."),
+      h("p", { class: "muted" }, "Only emails from the company itself or real application confirmations from job sites are used. Only the sender, subject and result are saved, never the email body."),
       tabs,
       list,
     ),

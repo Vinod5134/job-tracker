@@ -4,6 +4,7 @@ import com.vinod.jobtracker.activity.Activity;
 import com.vinod.jobtracker.activity.ActivityService;
 import com.vinod.jobtracker.application.ApplicationDtos.ApplicationRequest;
 import com.vinod.jobtracker.application.ApplicationDtos.ApplicationResponse;
+import com.vinod.jobtracker.application.ApplicationDtos.EmailUpdate;
 import com.vinod.jobtracker.common.NotFoundException;
 import com.vinod.jobtracker.realtime.LiveUpdateService;
 import java.time.LocalDate;
@@ -109,8 +110,8 @@ public class ApplicationService {
      * @param manual true when the user confirmed it in "Needs review" (skips the forward-only rule)
      */
     @Transactional
-    public Optional<ApplicationResponse> applyEmailUpdate(Long userId, String company, String role,
-                                                          ApplicationStatus status, boolean manual) {
+    public Optional<EmailUpdate> applyEmailUpdate(Long userId, String company, String role,
+                                                  ApplicationStatus status, boolean manual) {
         Optional<JobApplication> existing = applications.findByUserIdOrderByUpdatedAtDesc(userId).stream()
                 .filter(a -> CompanyNames.sameCompany(a.getCompany(), company))
                 .findFirst();
@@ -121,6 +122,7 @@ public class ApplicationService {
             if (!allowed) {
                 return Optional.empty();
             }
+            ApplicationStatus previous = app.getStatus();
             app.changeStatus(status);
             if ((app.getJobRole() == null || app.getJobRole().isBlank()) && role != null) {
                 app.setJobRole(truncate(role, 150));
@@ -130,7 +132,7 @@ public class ApplicationService {
             live.send(userId, LiveUpdateService.APPLICATION_UPDATED, response);
             activityService.log(userId, saved.getId(), "Email: " + saved.getCompany() + " moved to " + status.label(),
                     Activity.Origin.EMAIL);
-            return Optional.of(response);
+            return Optional.of(new EmailUpdate(response, previous, false));
         }
 
         JobApplication app = new JobApplication();
@@ -145,7 +147,30 @@ public class ApplicationService {
         live.send(userId, LiveUpdateService.APPLICATION_CREATED, response);
         activityService.log(userId, saved.getId(), "Email: added " + describe(saved) + " as " + status.label(),
                 Activity.Origin.EMAIL);
-        return Optional.of(response);
+        return Optional.of(new EmailUpdate(response, null, true));
+    }
+
+    /**
+     * Undoes a board change that came from an email: removes the card if the email created it,
+     * otherwise puts the status back (only if nobody has changed it since).
+     *
+     * @param createdCard null for records saved before this was tracked; then a card whose source is
+     *                    EMAIL is treated as created by the email
+     */
+    @Transactional
+    public void revertEmailUpdate(Long userId, Long applicationId, Boolean createdCard,
+                                  ApplicationStatus previousStatus, ApplicationStatus detectedStatus) {
+        Optional<JobApplication> found = applications.findByIdAndUserId(applicationId, userId);
+        if (found.isEmpty()) {
+            return;
+        }
+        JobApplication app = found.get();
+        boolean created = createdCard != null ? createdCard : app.getSource() == JobSource.EMAIL;
+        if (created) {
+            delete(userId, applicationId);
+        } else if (previousStatus != null && app.getStatus() == detectedStatus) {
+            changeStatus(userId, applicationId, previousStatus);
+        }
     }
 
     private JobApplication find(Long userId, Long id) {

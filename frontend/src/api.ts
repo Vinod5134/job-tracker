@@ -85,6 +85,7 @@ export const api = {
   acceptEmail: (id: number, body: { company: string; status: Status; role: string | null }) =>
     request<EmailRecord>(`/api/gmail/emails/${id}/accept`, { method: "POST", body }),
   dismissEmail: (id: number) => request<void>(`/api/gmail/emails/${id}/dismiss`, { method: "POST" }),
+  undoEmail: (id: number) => request<EmailRecord>(`/api/gmail/emails/${id}/undo`, { method: "POST" }),
 
   searchJobs: (what: string, where: string, page: number) => {
     const params = new URLSearchParams({ what, page: String(page) });

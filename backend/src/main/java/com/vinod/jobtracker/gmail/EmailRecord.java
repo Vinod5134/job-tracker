@@ -69,6 +69,15 @@ public class EmailRecord {
     @Column(name = "application_id")
     private Long applicationId;
 
+    /** Card status before this email changed it (for Undo). */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "previous_status", length = 20)
+    private ApplicationStatus previousStatus;
+
+    /** True when this email created the card (Undo then removes it). */
+    @Column(name = "created_card")
+    private Boolean createdCard;
+
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
@@ -159,6 +168,22 @@ public class EmailRecord {
 
     public void setApplicationId(Long applicationId) {
         this.applicationId = applicationId;
+    }
+
+    public ApplicationStatus getPreviousStatus() {
+        return previousStatus;
+    }
+
+    public void setPreviousStatus(ApplicationStatus previousStatus) {
+        this.previousStatus = previousStatus;
+    }
+
+    public Boolean getCreatedCard() {
+        return createdCard;
+    }
+
+    public void setCreatedCard(Boolean createdCard) {
+        this.createdCard = createdCard;
     }
 
     public Instant getCreatedAt() {
