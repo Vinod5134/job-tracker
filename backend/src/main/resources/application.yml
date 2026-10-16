@@ -1,0 +1,89 @@
+server:
+  port: ${PORT:8080}
+  # Render/Vercel sit behind a proxy: trust X-Forwarded-* so OAuth redirect URLs use https
+  forward-headers-strategy: framework
+
+spring:
+  application:
+    name: job-tracker
+  profiles:
+    # "dev" = H2 file database (no setup). Use "oracle" in production.
+    active: ${SPRING_PROFILES_ACTIVE:dev}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        jdbc.time_zone: UTC
+  security:
+    oauth2:
+      client:
+        registration:
+          # Normal sign-in: basic profile only
+          google:
+            client-id: ${GOOGLE_CLIENT_ID:replace-me}
+            client-secret: ${GOOGLE_CLIENT_SECRET:replace-me}
+            scope: openid, email, profile
+          # Optional "Connect Gmail": adds read-only Gmail access
+          google-gmail:
+            provider: google
+            client-id: ${GOOGLE_CLIENT_ID:replace-me}
+            client-secret: ${GOOGLE_CLIENT_SECRET:replace-me}
+            scope: openid, email, profile, https://www.googleapis.com/auth/gmail.readonly
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
+            client-name: Gmail
+
+app:
+  frontend-url: ${FRONTEND_URL:http://localhost:5173}
+  # Must be at least 32 characters. Generate a random one for production.
+  jwt-secret: ${JWT_SECRET:local-dev-secret-change-me-0123456789abcdef}
+  jwt-expiry-hours: ${JWT_EXPIRY_HOURS:72}
+  # Used to encrypt the stored Gmail refresh token (AES-GCM)
+  encryption-key: ${ENCRYPTION_KEY:local-dev-encryption-key-change-me}
+  gmail:
+    sync-interval-ms: ${GMAIL_SYNC_INTERVAL_MS:600000}
+    first-sync-days: 30
+    max-messages-per-sync: 50
+  adzuna:
+    app-id: ${ADZUNA_APP_ID:}
+    app-key: ${ADZUNA_APP_KEY:}
+    country: in
+  default-skills: Java, Spring Boot, Spring MVC, Spring Security, Spring Data JPA, Hibernate, Microservices, REST API, JSON, SQL, PL/SQL, Oracle, JDBC, Servlets, JSP, HTML, CSS, JavaScript, TypeScript, Git, Maven
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+
+---
+spring:
+  config:
+    activate:
+      on-profile: dev
+  datasource:
+    url: jdbc:h2:file:./data/jobtracker;MODE=Oracle
+    username: sa
+    password:
+
+---
+spring:
+  config:
+    activate:
+      on-profile: oracle
+  datasource:
+    # Example for Oracle Autonomous Database (TLS, no wallet):
+    # jdbc:oracle:thin:@(description=(retry_count=20)(retry_delay=3)(address=(protocol=tcps)(port=1521)(host=adb.ap-hyderabad-1.oraclecloud.com))(connect_data=(service_name=xxxx_jobtracker_low.adb.oraclecloud.com))(security=(ssl_server_dn_match=yes)))
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+    driver-class-name: oracle.jdbc.OracleDriver
+    hikari:
+      maximum-pool-size: 5
+  jpa:
+    database-platform: org.hibernate.dialect.OracleDialect

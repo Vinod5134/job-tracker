@@ -1,0 +1,12 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:jobtracker-test;MODE=Oracle;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+
+app:
+  gmail:
+    sync-interval-ms: 3600000
