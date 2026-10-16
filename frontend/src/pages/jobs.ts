@@ -3,7 +3,7 @@ import { errorBox, h, loading, safeUrl, setChildren } from "../dom";
 import { timeAgo } from "../format";
 import { onLive } from "../live";
 import { toast, toastError } from "../toast";
-import type { GmailStatus, JobResult, JobSite, Source } from "../types";
+import type { AlertSourceStatus, GmailStatus, JobResult, JobSite, Source } from "../types";
 
 const PREFS_KEY = "jobtracker.jobPrefs";
 const AUTO_CHECK_AFTER_MS = 2 * 60 * 1000;
@@ -29,6 +29,30 @@ export function renderJobs(root: HTMLElement): () => void {
   const fresherOnly = h("input", { type: "checkbox", checked: prefs.fresherOnly });
   const siteChips = h("div", { class: "chips filter-chips", role: "group", "aria-label": "Job site" });
   const status = h("span", { class: "muted small" });
+
+  // ---- Which sites are sending alerts to his Gmail ----
+  const alertPanel = h("section", { class: "card alert-panel", "aria-label": "Job alert subscriptions", hidden: true });
+  const loadAlertStatus = async () => {
+    try {
+      const sources = await api.alertStatus();
+      if (!alive || !gmail?.connected) {
+        alertPanel.hidden = true;
+        return;
+      }
+      alertPanel.hidden = false;
+      const missing = sources.filter((s) => !s.subscribed).length;
+      setChildren(
+        alertPanel,
+        h("div", { class: "alert-panel-head" },
+          h("h2", null, "Your job alerts"),
+          h("span", { class: missing ? "pill state-needs_review" : "pill pill-success" },
+            missing ? `${missing} not set up` : "All set up")),
+        h("ul", { class: "alert-sources" }, sources.map((s) => alertRow(s, what.value.trim() || "java developer", where.value.trim()))),
+      );
+    } catch {
+      alertPanel.hidden = true;
+    }
+  };
   const checkBtn = h("button", { class: "btn", type: "button" }, "Check now");
   const list = h("div", { class: "job-results" });
 
@@ -115,6 +139,7 @@ export function renderJobs(root: HTMLElement): () => void {
     try {
       await api.syncGmail();
       await load(true);
+      await loadAlertStatus();
     } catch (e) {
       if (!quiet) {
         toastError((e as Error).message);
@@ -152,6 +177,7 @@ export function renderJobs(root: HTMLElement): () => void {
       { class: "page" },
       h("div", { class: "page-head" }, h("h1", null, "Find jobs"), checkBtn),
       h("p", { class: "muted" }, "Jobs from your LinkedIn, Naukri and Indeed alerts, best skill match first. New ones appear here as they arrive."),
+      alertPanel,
       h("div", { class: "toolbar wrap" }, siteChips, h("label", { class: "check" }, fresherOnly, "Fresher-friendly only"), status),
       h("div", { class: "toolbar" }, filterText),
       list,
@@ -168,6 +194,7 @@ export function renderJobs(root: HTMLElement): () => void {
   list.replaceChildren(loading("Loading your jobs"));
 
   load().then(() => {
+    loadAlertStatus();
     // Check Gmail right away if the last check is a few minutes old, so the feed is fresh on open
     const last = gmail?.lastSyncedAt ? Date.parse(gmail.lastSyncedAt) : 0;
     if (alive && gmail?.connected && Date.now() - last > AUTO_CHECK_AFTER_MS) {
@@ -241,6 +268,41 @@ function jobCard(job: JobResult, isNew: boolean): HTMLElement {
       url ? h("a", { class: "btn btn-primary", href: url, target: "_blank", rel: "noopener noreferrer" }, `Apply on ${SITE_NAME[job.source]}`) : null,
       saveBtn,
     ),
+  );
+}
+
+/** How to create an alert on each site (shown next to a site that isn't sending alerts). */
+const ALERT_SETUP: Record<JobSite, string> = {
+  LINKEDIN: "Search the job, set Experience level → Entry level, then switch on \"Set alert\".",
+  NAUKRI: "Search the job, set Experience to 0 years, then click \"Create job alert\" (or \"Save search\").",
+  INDEED: "Search the job, then click \"Get new jobs for this search by email\" and pick the most frequent option.",
+};
+
+function alertRow(s: AlertSourceStatus, what: string, where: string): HTMLElement {
+  const site = JOB_SITES.find((j) => j.id === s.source.toLowerCase());
+  if (s.subscribed) {
+    return h(
+      "li",
+      { class: "alert-source" },
+      h("span", { class: "alert-icon ok", "aria-hidden": "true" }, "✓"),
+      h("div", { class: "alert-source-text" },
+        h("strong", null, SITE_NAME[s.source]),
+        h("span", { class: "muted small" },
+          [s.lastAlertAt ? `Last alert ${timeAgo(s.lastAlertAt)}` : "Sending alerts", `${s.jobs} job${s.jobs === 1 ? "" : "s"} found`].join(" · "))),
+      h("span", { class: "pill pill-success" }, "Subscribed"),
+    );
+  }
+  return h(
+    "li",
+    { class: "alert-source" },
+    h("span", { class: "alert-icon missing", "aria-hidden": "true" }, "!"),
+    h("div", { class: "alert-source-text" },
+      h("strong", null, SITE_NAME[s.source]),
+      h("span", { class: "muted small" }, `No alert emails in Gmail in the last 14 days. ${ALERT_SETUP[s.source]}`)),
+    site
+      ? h("a", { class: "btn btn-small-solid", href: site.url({ what, where, fresher: true }), target: "_blank", rel: "noopener noreferrer" },
+          `Set up on ${SITE_NAME[s.source]}`)
+      : h("span", { class: "pill state-needs_review" }, "Not subscribed"),
   );
 }
 

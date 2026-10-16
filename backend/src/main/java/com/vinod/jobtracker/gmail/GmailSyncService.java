@@ -221,6 +221,20 @@ public class GmailSyncService {
         return new SyncResult(scanned, detected, updated, review, false);
     }
 
+    /** A fresh Gmail access token for this user, or empty when Gmail isn't connected or access was removed. */
+    public Optional<String> accessToken(Long userId) {
+        return connections.findByUserId(userId)
+                .filter(GmailConnection::isActive)
+                .flatMap(connection -> {
+                    try {
+                        return Optional.of(gmail.refreshAccessToken(cipher.decrypt(connection.getRefreshTokenEncrypted())));
+                    } catch (GmailAuthException | RestClientException e) {
+                        log.info("No Gmail access for user {}: {}", userId, e.getMessage());
+                        return Optional.empty();
+                    }
+                });
+    }
+
     /** Job-alert emails feed "Find jobs"; a problem there must not break status syncing. */
     private void syncJobAlerts(GmailConnection connection, String accessToken, Instant startedAt) {
         Instant since = connection.getAlertsSyncedAt() == null

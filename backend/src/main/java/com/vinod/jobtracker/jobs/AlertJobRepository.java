@@ -11,6 +11,8 @@ public interface AlertJobRepository extends JpaRepository<AlertJob, Long> {
 
     List<AlertJob> findTop150ByUserIdOrderByReceivedAtDesc(Long userId);
 
+    long countByUserIdAndSource(Long userId, JobAlertParser.Source source);
+
     @Transactional
     long deleteByUserIdAndReceivedAtBefore(Long userId, Instant before);
 

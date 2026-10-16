@@ -1,6 +1,7 @@
 import { clearToken, currentToken } from "./auth";
 import { API_URL } from "./config";
 import type {
+  AlertSourceStatus,
   Application,
   ApplicationInput,
   Dashboard,
@@ -88,4 +89,5 @@ export const api = {
   undoEmail: (id: number) => request<EmailRecord>(`/api/gmail/emails/${id}/undo`, { method: "POST" }),
 
   alertJobs: () => request<JobResult[]>("/api/jobs/alerts"),
+  alertStatus: () => request<AlertSourceStatus[]>("/api/jobs/alert-status"),
 };

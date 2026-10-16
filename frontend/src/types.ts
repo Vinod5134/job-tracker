@@ -109,6 +109,14 @@ export interface SyncResult {
 
 export type JobSite = "LINKEDIN" | "NAUKRI" | "INDEED";
 
+/** Whether a site is sending job-alert emails to the connected Gmail (last 14 days). */
+export interface AlertSourceStatus {
+  source: JobSite;
+  subscribed: boolean;
+  lastAlertAt: string | null;
+  jobs: number;
+}
+
 /** A job from one of the user's LinkedIn / Naukri / Indeed alert emails. */
 export interface JobResult {
   id: string;

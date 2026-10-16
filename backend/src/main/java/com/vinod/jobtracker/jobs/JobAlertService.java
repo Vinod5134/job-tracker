@@ -7,8 +7,10 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -74,6 +76,42 @@ public class JobAlertService {
         long removed = alertJobs.deleteByUserIdAndReceivedAtBefore(userId, Instant.now().minus(KEEP_DAYS, ChronoUnit.DAYS));
         log.info("Job alerts for user {}: {} emails, {} new jobs, {} expired", userId, ids.size(), added, removed);
         return added;
+    }
+
+    /** Gmail searches that find each site's job-alert emails (not application confirmations). */
+    private static final Map<JobAlertParser.Source, String> ALERT_SENDERS = Map.of(
+            JobAlertParser.Source.LINKEDIN, "{from:jobalerts-noreply@linkedin.com from:jobs-listings@linkedin.com}",
+            JobAlertParser.Source.NAUKRI, "from:naukri.com {subject:alert subject:\"jobs for you\" subject:recommended "
+                    + "subject:\"jobs matching\" subject:\"new jobs\" subject:\"job matches\"}",
+            JobAlertParser.Source.INDEED, "from:indeed.com {subject:jobs subject:alert subject:\"new job\"}");
+
+    public record AlertSourceStatus(JobAlertParser.Source source, boolean subscribed, Instant lastAlertAt, long jobs) {
+    }
+
+    /**
+     * For each site: has an alert email arrived in the last 14 days? Checked in Gmail directly,
+     * so a site counts as set up even if no jobs could be read from its emails yet.
+     */
+    public List<AlertSourceStatus> sourceStatus(Long userId, String accessToken) {
+        List<AlertSourceStatus> result = new ArrayList<>();
+        for (JobAlertParser.Source source : JobAlertParser.Source.values()) {
+            List<String> ids = gmail.listMessageIds(accessToken,
+                    "newer_than:" + KEEP_DAYS + "d -in:sent " + ALERT_SENDERS.get(source), 1);
+            Instant last = ids.isEmpty() ? null : gmail.getMessage(accessToken, ids.get(0)).receivedAt();
+            long jobs = alertJobs.countByUserIdAndSource(userId, source);
+            result.add(new AlertSourceStatus(source, last != null || jobs > 0, last, jobs));
+        }
+        return result;
+    }
+
+    /** Without Gmail we can still say how many jobs each site gave us so far. */
+    public List<AlertSourceStatus> sourceStatusWithoutGmail(Long userId) {
+        List<AlertSourceStatus> result = new ArrayList<>();
+        for (JobAlertParser.Source source : JobAlertParser.Source.values()) {
+            long jobs = alertJobs.countByUserIdAndSource(userId, source);
+            result.add(new AlertSourceStatus(source, jobs > 0, null, jobs));
+        }
+        return result;
     }
 
     public List<AlertJob> recent(Long userId) {
