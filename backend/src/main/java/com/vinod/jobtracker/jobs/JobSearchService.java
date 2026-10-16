@@ -98,7 +98,7 @@ public class JobSearchService {
                 .queryParam("sort_by", "date")
                 // Without this Adzuna may answer with an HTML page instead of JSON
                 .queryParam("content-type", "application/json")
-                .queryParam("what", what == null || what.isBlank() ? "java developer" : what.trim());
+                .queryParam("what", searchWords(what));
         if (where != null && !where.isBlank()) {
             uri.queryParam("where", where.trim());
         }
@@ -179,6 +179,17 @@ public class JobSearchService {
         }
         results.sort(Comparator.comparingInt(JobResult::matchScore).reversed());
         return new JobSearchResponse(body.path("count").asLong(results.size()), safePage, results);
+    }
+
+    /**
+     * Adzuna needs every word to appear in the ad, and words like "fresher" rarely do,
+     * so they're dropped here (the "Fresher-friendly only" filter covers that instead).
+     */
+    static String searchWords(String what) {
+        String cleaned = what == null ? "" : what
+                .replaceAll("(?i)\\b(freshers?|entry[- ]level|graduates?|0\\s*-\\s*[12]\\s*(yrs?|years?)|jobs?|openings?)\\b", " ")
+                .replaceAll("\\s+", " ").trim();
+        return cleaned.isEmpty() ? "java developer" : cleaned;
     }
 
     private static String stripTags(String s) {

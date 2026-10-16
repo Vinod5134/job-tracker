@@ -73,6 +73,13 @@ class JobSearchServiceTest {
     }
 
     @Test
+    void dropsWordsThatRarelyAppearInAds() {
+        assertThat(JobSearchService.searchWords("java developer fresher")).isEqualTo("java developer");
+        assertThat(JobSearchService.searchWords("Freshers jobs")).isEqualTo("java developer");
+        assertThat(JobSearchService.searchWords("spring boot entry level")).isEqualTo("spring boot");
+    }
+
+    @Test
     void wrongKeysGiveAClearMessage() {
         adzuna.expect(requestTo(org.hamcrest.Matchers.containsString("api.adzuna.com")))
                 .andRespond(withStatus(HttpStatus.UNAUTHORIZED).contentType(MediaType.APPLICATION_JSON)

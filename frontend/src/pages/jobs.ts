@@ -49,7 +49,12 @@ export function renderJobs(root: HTMLElement): () => void {
       setChildren(
         results,
         h("p", { class: "muted small" }, `${response.total.toLocaleString("en-IN")} jobs found · page ${response.page} · best skill match first`),
-        list.length ? list.map(jobCard) : h("p", { class: "muted" }, "No matching jobs on this page. Try a broader title or another city."),
+        list.length
+          ? list.map(jobCard)
+          : h("p", { class: "muted" },
+              fresherOnly.checked && response.results.length
+                ? `${response.results.length} jobs on this page, but none look fresher-friendly. Untick "Fresher-friendly only" to see them.`
+                : "No matching jobs. Try a shorter title (like \"java developer\") or another city."),
       );
       pager.replaceChildren(
         h("button", { class: "btn", type: "button", disabled: page <= 1, onClick: () => run(page - 1) }, "Previous"),
@@ -332,7 +337,7 @@ function readLastSearch(): LastSearch {
   } catch {
     // ignore
   }
-  return { what: "java developer fresher", where: "Hyderabad", fresherOnly: false };
+  return { what: "java developer", where: "Hyderabad", fresherOnly: true };
 }
 
 function saveLastSearch(search: LastSearch): void {
