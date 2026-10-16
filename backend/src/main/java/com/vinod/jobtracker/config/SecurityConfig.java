@@ -53,7 +53,7 @@ public class SecurityConfig {
                 .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/oauth2/**", "/login/**", "/ws/**", "/error",
-                                "/actuator/health", "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**")
+                                "/actuator/health", "/actuator/info", "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**")
                         .permitAll()
                         .anyRequest().authenticated())
                 .oauth2Login(oauth -> oauth

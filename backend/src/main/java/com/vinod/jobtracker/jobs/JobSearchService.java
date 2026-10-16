@@ -16,6 +16,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestClientResponseException;
@@ -88,10 +89,15 @@ public class JobSearchService {
                 throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                         "Adzuna couldn't run that search. Try a simpler title or a different city.");
             }
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Job search is unavailable right now. Try again.");
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                    "Job search is unavailable right now (Adzuna returned HTTP " + code + "). Try again.");
+        } catch (ResourceAccessException e) {
+            log.warn("Adzuna search failed: no response: {}", e.getMessage());
+            throw new ResponseStatusException(HttpStatus.GATEWAY_TIMEOUT, "Adzuna didn't respond in time. Try again.");
         } catch (RestClientException e) {
-            log.warn("Adzuna search failed: {}", e.getMessage());
-            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "Job search is unavailable right now. Try again.");
+            log.warn("Adzuna search failed: unreadable reply", e);
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                    "Couldn't read Adzuna's reply (" + e.getClass().getSimpleName() + "). Try again.");
         }
         if (body == null) {
             return new JobSearchResponse(0, safePage, List.of());
