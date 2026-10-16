@@ -779,6 +779,34 @@ a:focus-visible {
   white-space: nowrap;
 }
 
+.site-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: -6px 0 18px;
+}
+
+.btn-site {
+  padding: 5px 12px;
+  font-size: 0.85rem;
+}
+
+.site-linkedin {
+  color: #0a66c2;
+}
+
+.site-naukri {
+  color: #4a90e2;
+}
+
+@media (prefers-color-scheme: dark) {
+  .site-linkedin,
+  .site-naukri {
+    color: var(--accent-text);
+  }
+}
+
 .job-result-head {
   display: flex;
   justify-content: space-between;

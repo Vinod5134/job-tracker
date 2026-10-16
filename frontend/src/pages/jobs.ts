@@ -18,6 +18,22 @@ export function renderJobs(root: HTMLElement): () => void {
   const results = h("div", { class: "job-results" });
   const pager = h("div", { class: "pager" });
 
+  // Buttons that open the same search on LinkedIn, Naukri, etc. (their own sites, no scraping)
+  const siteLinks = h("div", { class: "site-links" });
+  const drawSiteLinks = () => {
+    const search = { what: what.value.trim() || "java developer", where: where.value.trim(), fresher: fresherOnly.checked };
+    setChildren(
+      siteLinks,
+      h("span", { class: "muted small" }, "Also search on:"),
+      JOB_SITES.map((site) =>
+        h("a", { class: `btn btn-site site-${site.id}`, href: site.url(search), target: "_blank", rel: "noopener noreferrer" }, site.name),
+      ),
+    );
+  };
+  [what, where].forEach((input) => input.addEventListener("input", drawSiteLinks));
+  fresherOnly.addEventListener("change", drawSiteLinks);
+  drawSiteLinks();
+
   const run = async (newPage = 1) => {
     page = newPage;
     saveLastSearch({ what: what.value, where: where.value, fresherOnly: fresherOnly.checked });
@@ -50,7 +66,7 @@ export function renderJobs(root: HTMLElement): () => void {
       "div",
       { class: "page" },
       h("div", { class: "page-head" }, h("h1", null, "Find jobs")),
-      h("p", { class: "muted" }, "Live listings from Adzuna, scored against the skills in Settings. Apply on the job's site, then save it here to track it."),
+      h("p", { class: "muted" }, "Live listings from Adzuna, scored against your skills. The buttons below open the same search on LinkedIn, Naukri, Indeed and Foundit. Apply there, then add the job to your board."),
       h(
         "form",
         {
@@ -65,6 +81,7 @@ export function renderJobs(root: HTMLElement): () => void {
         h("label", { class: "check" }, fresherOnly, "Fresher-friendly only"),
         h("button", { class: "btn btn-primary", type: "submit" }, "Search"),
       ),
+      siteLinks,
       results,
       pager,
     ),
@@ -127,6 +144,77 @@ function jobCard(job: JobResult): HTMLElement {
     ),
   );
 }
+
+interface SiteSearch {
+  what: string;
+  where: string;
+  fresher: boolean;
+}
+
+/** "Java Developer" -> "java-developer" (Naukri's URL style). */
+function slug(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+}
+
+/** Common spellings people type that the job sites don't recognise. */
+function city(where: string): string {
+  return /^(banglore|bengaluru|bengalore)$/i.test(where) ? "Bangalore" : where;
+}
+
+/** Search URLs on each site's own website, filtered to recent posts (and entry level for freshers). */
+const JOB_SITES: { id: string; name: string; url: (s: SiteSearch) => string }[] = [
+  {
+    id: "linkedin",
+    name: "LinkedIn",
+    url: (s) => {
+      const p = new URLSearchParams({ keywords: s.what, f_TPR: "r604800", sortBy: "DD" });
+      if (s.where) {
+        p.set("location", city(s.where));
+      }
+      if (s.fresher) {
+        p.set("f_E", "1,2"); // internship + entry level
+      }
+      return `https://www.linkedin.com/jobs/search/?${p}`;
+    },
+  },
+  {
+    id: "naukri",
+    name: "Naukri",
+    url: (s) => {
+      const path = s.where ? `${slug(s.what)}-jobs-in-${slug(city(s.where))}` : `${slug(s.what)}-jobs`;
+      const p = new URLSearchParams({ jobAge: "7" });
+      if (s.fresher) {
+        p.set("experience", "0");
+      }
+      return `https://www.naukri.com/${path}?${p}`;
+    },
+  },
+  {
+    id: "indeed",
+    name: "Indeed",
+    url: (s) => {
+      const p = new URLSearchParams({ q: s.fresher ? `${s.what} fresher` : s.what, fromage: "7", sort: "date" });
+      if (s.where) {
+        p.set("l", city(s.where));
+      }
+      return `https://in.indeed.com/jobs?${p}`;
+    },
+  },
+  {
+    id: "foundit",
+    name: "Foundit",
+    url: (s) => {
+      const p = new URLSearchParams({ query: s.what });
+      if (s.where) {
+        p.set("locations", city(s.where));
+      }
+      if (s.fresher) {
+        p.set("experienceRanges", "0~1");
+      }
+      return `https://www.foundit.in/srp/results?${p}`;
+    },
+  },
+];
 
 interface LastSearch {
   what: string;
