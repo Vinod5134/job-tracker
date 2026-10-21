@@ -52,6 +52,16 @@ export function createShell(root: HTMLElement): Shell {
   );
 
   const content = h("main", { class: "content", id: "main", tabindex: "-1" });
+  const wakeBanner = h(
+    "div",
+    { class: "wake-banner", role: "status", hidden: true },
+    h("span", { class: "spinner", "aria-hidden": "true" }),
+    "Starting the server. The free plan sleeps when nobody uses it, so this can take a minute or two.",
+  );
+  const onWaking = (event: Event) => {
+    wakeBanner.hidden = !(event as CustomEvent<boolean>).detail;
+  };
+  window.addEventListener("server-waking", onWaking);
   const frame = h(
     "div",
     { class: "shell" },
@@ -65,6 +75,7 @@ export function createShell(root: HTMLElement): Shell {
       "div",
       { class: "main-col" },
       h("header", { class: "topbar" }, liveBadge, h("div", { class: "topbar-user" }, avatar, userName, signOut)),
+      wakeBanner,
       content,
     ),
   );
@@ -115,6 +126,7 @@ export function createShell(root: HTMLElement): Shell {
     destroy() {
       unsubscribeState();
       unsubscribeLive();
+      window.removeEventListener("server-waking", onWaking);
     },
   };
 }

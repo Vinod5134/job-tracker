@@ -194,7 +194,7 @@ Full interactive docs at `/swagger-ui.html`.
 
 ## Known limits (and why)
 
-- **Render free tier sleeps after about 15 minutes idle.** The first request takes 30–60 seconds, and Gmail is only checked while the server is awake. Emails that arrive while it's asleep are picked up on the next sync, so nothing is lost. A paid instance or an uptime pinger removes the delay.
+- **Render free tier sleeps after about 15 minutes idle** and takes 1–3 minutes to start. A GitHub Actions workflow (`.github/workflows/keep-alive.yml`) pings `/actuator/health` every 10 minutes to keep it awake (one always-on service fits in Render's 750 free hours a month). If it does sleep, the frontend shows "Starting the server…" and retries automatically. A paid Render instance removes the issue completely.
 - **Single service instead of microservices.** Splitting auth, applications and Gmail into separate services would mean three sleeping free-tier instances and a message broker. The code is organised by feature, so each package could become its own service with a gateway if needed.
 - **Rule-based email classifier.** It's predictable and easy to test. Unsure cases go to "Needs review" instead of guessing.
 - **Push vs. polling for Gmail.** Gmail push notifications need Google Cloud Pub/Sub and a public webhook; polling every 10 minutes is simpler and fits the free tier.

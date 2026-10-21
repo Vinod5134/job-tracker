@@ -13,7 +13,8 @@ WORKDIR /app
 RUN useradd --system --uid 1001 app
 COPY --from=build /app/target/job-tracker.jar app.jar
 USER app
-# Render's free plan has 512 MB of memory
-ENV JAVA_OPTS="-XX:MaxRAMPercentage=75 -XX:+UseSerialGC"
+# Render's free plan has 512 MB of memory and a small CPU share.
+# TieredStopAtLevel=1 uses only the fast JIT compiler, which cuts startup time a lot on a slow CPU.
+ENV JAVA_OPTS="-XX:MaxRAMPercentage=75 -XX:+UseSerialGC -XX:TieredStopAtLevel=1 -Xss512k"
 EXPOSE 8080
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]

@@ -38,16 +38,36 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     headers["Content-Type"] = "application/json";
   }
 
-  let response: Response;
-  try {
-    response = await fetch(API_URL + path, {
-      method: options.method ?? "GET",
-      headers,
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
-    });
-  } catch {
-    throw new ApiError("Can't reach the server. If it was asleep, it can take up to a minute to wake up.", 0);
+  const init: RequestInit = {
+    method: options.method ?? "GET",
+    headers,
+    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+  };
+
+  // The free server sleeps when idle and takes 1-3 minutes to start. While it starts, requests
+  // fail outright or get Render's 502/503 page, so wait and retry instead of showing an error.
+  let response: Response | null = null;
+  let data: unknown = null;
+  for (let attempt = 0; ; attempt++) {
+    try {
+      response = await fetch(API_URL + path, init);
+      data = response.status === 204 ? null : await response.json().catch(() => null);
+      // Our own errors are JSON; a non-JSON 502/503/504 comes from Render while the app starts
+      const starting = [502, 503, 504].includes(response.status) && data === null;
+      if (!starting) {
+        break;
+      }
+    } catch {
+      response = null; // network error: the server isn't accepting connections yet
+    }
+    if (attempt >= WAKE_MAX_ATTEMPTS) {
+      setWaking(false);
+      throw new ApiError("The server didn't start in time. Try again in a minute.", 0);
+    }
+    setWaking(true);
+    await new Promise((resolve) => window.setTimeout(resolve, WAKE_RETRY_MS));
   }
+  setWaking(false);
 
   if (response.status === 401) {
     clearToken();
@@ -57,11 +77,24 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   if (response.status === 204) {
     return undefined as T;
   }
-  const data = await response.json().catch(() => null);
   if (!response.ok) {
-    throw new ApiError(data?.message ?? `Request failed (${response.status})`, response.status, data?.fieldErrors ?? {});
+    const error = (data ?? {}) as { message?: string; fieldErrors?: Record<string, string> };
+    throw new ApiError(error.message ?? `Request failed (${response.status})`, response.status, error.fieldErrors ?? {});
   }
   return data as T;
+}
+
+const WAKE_RETRY_MS = 5000;
+const WAKE_MAX_ATTEMPTS = 36; // about 3 minutes
+
+let waking = false;
+
+/** Tells the layout to show or hide the "Starting the server…" banner. */
+function setWaking(value: boolean): void {
+  if (waking !== value) {
+    waking = value;
+    window.dispatchEvent(new CustomEvent("server-waking", { detail: value }));
+  }
 }
 
 export const api = {

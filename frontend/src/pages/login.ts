@@ -1,8 +1,10 @@
-import { LOGIN_URL } from "../config";
+import { API_URL, LOGIN_URL } from "../config";
 import { h } from "../dom";
 
 export function renderLogin(root: HTMLElement, params: URLSearchParams): () => void {
   const error = params.get("error");
+  // Start waking the free server now, so sign-in is quick when the button is clicked
+  fetch(`${API_URL}/actuator/health`, { mode: "no-cors" }).catch(() => undefined);
   root.replaceChildren(
     h(
       "div",

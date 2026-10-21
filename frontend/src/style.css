@@ -400,6 +400,21 @@ a:focus-visible {
   color: var(--warning);
 }
 
+.wake-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 24px;
+  background: var(--warning-soft);
+  color: var(--warning);
+  font-size: 0.88rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.wake-banner[hidden] {
+  display: none;
+}
+
 .content {
   padding: 24px;
   outline: none;
